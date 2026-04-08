@@ -4,4 +4,6 @@ export { authService } from './authService';
 export { enrollmentService } from './enrollmentService';
 export { statsService } from './statsService';
 export { lessonService } from './lessonService';
+export { progressService } from './progressService';
+export { quizService } from './quizService';
 export { default as api } from './axios';
