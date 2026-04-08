@@ -68,15 +68,15 @@ const adminOnly = (req, res, next) => {
     next();
 };
 
-// Middleware cho instructor hoặc admin
-const instructorOrAdmin = (req, res, next) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'instructor') {
+// Nội dung khóa học: chỉ admin (theo spec admin + student)
+const contentAdminOnly = (req, res, next) => {
+    if (req.user.role !== 'admin') {
         return res.status(403).json({
             success: false,
-            message: 'Chỉ instructor hoặc admin mới có quyền'
+            message: 'Chỉ admin mới có quyền quản lý nội dung khóa học'
         });
     }
     next();
 };
 
-module.exports = { authMiddleware, adminOnly, instructorOrAdmin };
+module.exports = { authMiddleware, adminOnly, contentAdminOnly };

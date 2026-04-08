@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['admin', 'instructor', 'student'],
+        enum: ['admin', 'student'],
         default: 'student'
     },
     avatar: {
@@ -75,7 +75,8 @@ userSchema.virtual('profile').get(function() {
         name: this.name,
         email: this.email,
         role: this.role,
-        avatar: this.avatar
+        avatar: this.avatar,
+        is_active: this.is_active
     };
 });
 

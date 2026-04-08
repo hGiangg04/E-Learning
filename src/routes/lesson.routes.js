@@ -1,6 +1,6 @@
 const express = require('express');
 const lessonController = require('../controllers/lesson.controller');
-const { authMiddleware, instructorOrAdmin } = require('../middleware/auth.middleware');
+const { authMiddleware, contentAdminOnly } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
@@ -9,8 +9,8 @@ router.get('/course/:courseId', lessonController.getLessonsByCourse);
 router.get('/:id', lessonController.getLessonById);
 
 // Routes cần đăng nhập
-router.post('/', authMiddleware, instructorOrAdmin, lessonController.createLesson);
-router.put('/:id', authMiddleware, instructorOrAdmin, lessonController.updateLesson);
-router.delete('/:id', authMiddleware, instructorOrAdmin, lessonController.deleteLesson);
+router.post('/', authMiddleware, contentAdminOnly, lessonController.createLesson);
+router.put('/:id', authMiddleware, contentAdminOnly, lessonController.updateLesson);
+router.delete('/:id', authMiddleware, contentAdminOnly, lessonController.deleteLesson);
 
 module.exports = router;
