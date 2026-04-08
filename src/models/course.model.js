@@ -25,8 +25,9 @@ const courseSchema = new mongoose.Schema({
         default: null
     },
     category_id: {
-        type: Number,
-        default: 1
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Category',
+        default: null
     },
     price: {
         type: Number,

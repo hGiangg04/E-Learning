@@ -4,6 +4,8 @@ const { authMiddleware, contentAdminOnly } = require('../middleware/auth.middlew
 
 const router = express.Router();
 
+router.get('/admin/all', authMiddleware, contentAdminOnly, courseController.listAllForAdmin);
+
 // Routes công khai
 router.get('/', courseController.getAllCourses);
 router.get('/:id', courseController.getCourseById);

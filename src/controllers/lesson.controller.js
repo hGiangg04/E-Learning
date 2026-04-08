@@ -1,13 +1,24 @@
+const mongoose = require('mongoose');
 const Lesson = require('../models/lesson.model');
+const Course = require('../models/course.model');
 
 const lessonController = {
-    // GET /api/lessons/course/:courseId
+    // GET /api/lessons/course/:courseId — sắp xếp theo position
     getLessonsByCourse: async (req, res) => {
         try {
-            const lessons = await Lesson.find({ 
+            if (!mongoose.Types.ObjectId.isValid(req.params.courseId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'courseId không hợp lệ'
+                });
+            }
+
+            const lessons = await Lesson.find({
                 course_id: req.params.courseId,
                 is_published: 1
-            }).sort({ position: 1 });
+            })
+                .sort({ position: 1 })
+                .select('-content');
 
             res.json({
                 success: true,
@@ -44,10 +55,38 @@ const lessonController = {
         }
     },
 
-    // POST /api/lessons
+    // POST /api/lessons — admin: course_id, title, content, video_url, position
     createLesson: async (req, res) => {
         try {
-            const lesson = new Lesson(req.body);
+            const { course_id, title, position } = req.body;
+            if (!course_id || !title) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'course_id và title là bắt buộc'
+                });
+            }
+            if (!mongoose.Types.ObjectId.isValid(course_id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'course_id không hợp lệ'
+                });
+            }
+
+            const course = await Course.findById(course_id);
+            if (!course) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Khóa học không tồn tại'
+                });
+            }
+
+            let pos = position;
+            if (pos === undefined || pos === null) {
+                const last = await Lesson.findOne({ course_id }).sort({ position: -1 });
+                pos = last ? last.position + 1 : 1;
+            }
+
+            const lesson = new Lesson({ ...req.body, course_id, position: pos });
             await lesson.save();
 
             res.status(201).json({
@@ -63,7 +102,7 @@ const lessonController = {
         }
     },
 
-    // PUT /api/lessons/:id
+    // PUT /api/lessons/:id — đổi thứ tự: gửi position mới
     updateLesson: async (req, res) => {
         try {
             const lesson = await Lesson.findByIdAndUpdate(
