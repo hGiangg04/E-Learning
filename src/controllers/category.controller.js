@@ -4,8 +4,9 @@ const categoryController = {
     // GET /api/categories
     getAllCategories: async (req, res) => {
         try {
-            const categories = await Category.find({ is_active: 1 })
-                .sort({ name: 1 });
+            const categories = await Category.find({
+                $or: [{ is_active: 1 }, { is_active: { $exists: false } }]
+            }).sort({ name: 1 });
 
             res.json({
                 success: true,

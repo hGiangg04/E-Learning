@@ -12,6 +12,59 @@ function buildSlug(title) {
     return `${base || 'course'}-${Date.now()}`;
 }
 
+/** Tránh CastError khi client gửi category_id: "" hoặc số dạng string */
+function normalizeOptionalObjectId(value) {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    if (typeof value === 'string' && mongoose.Types.ObjectId.isValid(value)) {
+        return value;
+    }
+    return null;
+}
+
+function buildCourseUpdatePayload(body) {
+    const allowed = [
+        'title',
+        'description',
+        'slug',
+        'thumbnail',
+        'price',
+        'discount_price',
+        'discount_start',
+        'discount_end',
+        'duration_hours',
+        'level',
+        'language',
+        'is_published',
+        'category_id',
+        'instructor_id'
+    ];
+    const out = {};
+    for (const key of allowed) {
+        if (body[key] === undefined) continue;
+        if (key === 'category_id' || key === 'instructor_id') {
+            out[key] = normalizeOptionalObjectId(body[key]);
+            continue;
+        }
+        if (key === 'price' || key === 'discount_price' || key === 'duration_hours') {
+            const n = body[key];
+            out[key] = n === '' || n === null ? 0 : Number(n);
+            continue;
+        }
+        if (key === 'is_published') {
+            out[key] = Number(body[key]) === 1 ? 1 : 0;
+            continue;
+        }
+        if (key === 'thumbnail') {
+            out[key] = body[key] === null ? '' : String(body[key]);
+            continue;
+        }
+        out[key] = body[key];
+    }
+    return out;
+}
+
 const courseController = {
     // GET /api/courses — công khai: chỉ khóa đã publish
     getAllCourses: async (req, res) => {
@@ -162,7 +215,7 @@ const courseController = {
                 title,
                 slug: slug || buildSlug(title),
                 thumbnail: thumbnail !== undefined ? thumbnail : '',
-                category_id: category_id || null,
+                category_id: normalizeOptionalObjectId(category_id),
                 instructor_id: req.user._id,
                 ...rest
             });
@@ -189,14 +242,10 @@ const courseController = {
     // PUT /api/courses/:id
     updateCourse: async (req, res) => {
         try {
-            if (req.body.category_id) {
-                if (!mongoose.Types.ObjectId.isValid(req.body.category_id)) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'category_id không hợp lệ'
-                    });
-                }
-                const cat = await Category.findById(req.body.category_id);
+            const payload = buildCourseUpdatePayload(req.body);
+
+            if (payload.category_id) {
+                const cat = await Category.findById(payload.category_id);
                 if (!cat) {
                     return res.status(404).json({
                         success: false,
@@ -207,7 +256,7 @@ const courseController = {
 
             const course = await Course.findByIdAndUpdate(
                 req.params.id,
-                { ...req.body, updated_at: Date.now() },
+                { ...payload, updated_at: Date.now() },
                 { new: true, runValidators: true }
             )
                 .populate('category_id', 'name')

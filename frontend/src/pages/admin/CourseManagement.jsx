@@ -11,14 +11,17 @@ const PlusIcon = () => (
   </svg>
 );
 
-const StarIcon = () => (
-  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-  </svg>
-);
+function categoryIdForForm(course) {
+  const c = course?.category_id;
+  if (c == null) return '';
+  if (typeof c === 'object' && c._id != null) return String(c._id);
+  if (typeof c === 'string') return c;
+  return '';
+}
 
 export default function CourseManagement() {
   const [courses, setCourses] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
   const [search, setSearch] = useState('');
@@ -55,6 +58,21 @@ export default function CourseManagement() {
 
   useEffect(() => {
     fetchCourses();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminApi
+      .getCategories({ limit: 200 })
+      .then((res) => {
+        if (cancelled || !res.data?.success) return;
+        const list = res.data.data?.categories ?? [];
+        setCategories(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSearch = (value) => {
@@ -132,13 +150,34 @@ export default function CourseManagement() {
     setFormData({
       title: course.title || '',
       description: course.description || '',
-      price: course.price || '',
-      category_id: course.category_id?._id || '',
+      price: course.price ?? '',
+      category_id: categoryIdForForm(course),
       level: course.level || 'beginner',
       thumbnail: course.thumbnail || '',
-      is_published: course.is_published || 0,
+      is_published: course.is_published === 1 ? 1 : 0,
     });
     setIsModalOpen(true);
+  };
+
+  const handleThumbnailFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn file ảnh');
+      e.target.value = '';
+      return;
+    }
+    const maxBytes = 2 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      toast.error('Ảnh tối đa 2MB');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => ({ ...prev, thumbnail: reader.result }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handlePublish = async (course) => {
@@ -183,8 +222,13 @@ export default function CourseManagement() {
     e.preventDefault();
     try {
       const payload = {
-        ...formData,
+        title: formData.title.trim(),
+        description: formData.description,
         price: Number(formData.price) || 0,
+        level: formData.level,
+        thumbnail: formData.thumbnail || '',
+        is_published: Number(formData.is_published) === 1 ? 1 : 0,
+        category_id: formData.category_id ? formData.category_id : null,
       };
 
       if (editingCourse) {
@@ -284,6 +328,21 @@ export default function CourseManagement() {
                 required
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục</label>
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">— Chọn danh mục (tùy chọn) —</option>
+                {categories.map((cat) => (
+                  <option key={cat._id} value={cat._id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Giá (VND)</label>
@@ -293,6 +352,7 @@ export default function CourseManagement() {
                   onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
+                  min={0}
                 />
               </div>
               <div>
@@ -309,14 +369,37 @@ export default function CourseManagement() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Thumbnail URL</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh thumbnail</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleThumbnailFile}
+                className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
+              />
+              <p className="text-xs text-gray-500 mt-1">PNG/JPG tối đa 2MB — hoặc dán URL bên dưới</p>
               <input
                 type="text"
-                value={formData.thumbnail}
+                value={formData.thumbnail?.startsWith('data:') ? '' : formData.thumbnail}
                 onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full mt-2 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 placeholder="https://..."
               />
+              {formData.thumbnail && (
+                <div className="mt-3 flex items-center gap-3">
+                  <img
+                    src={formData.thumbnail}
+                    alt="Preview"
+                    className="h-20 w-32 object-cover rounded-lg border border-gray-200 bg-gray-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, thumbnail: '' })}
+                    className="text-sm text-red-600 hover:underline"
+                  >
+                    Xóa ảnh
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <button
