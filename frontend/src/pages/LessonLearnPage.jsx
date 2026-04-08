@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { lessonService, courseService } from '../api';
+import { lessonService, courseService, progressService, quizService } from '../api';
 
 const BOOKMARK_KEY = 'elearning-lesson-bookmarks';
 
@@ -35,6 +35,18 @@ function formatDurationVi(sec) {
   const m = Math.floor(n / 60);
   const s = n % 60;
   if (m < 60) return s > 0 ? `${m} phút ${s} giây` : `${m} phút`;
+  const h = Math.floor(m / 60);
+  const m2 = m % 60;
+  return m2 > 0 ? `${h} giờ ${m2} phút` : `${h} giờ`;
+}
+
+/** Tổng giây đã học → hiển thị ngắn */
+function formatStudyTimeTotal(seconds) {
+  const n = Math.floor(Number(seconds) || 0);
+  if (n <= 0) return '0 phút';
+  if (n < 60) return `${n} giây`;
+  const m = Math.floor(n / 60);
+  if (m < 60) return `${m} phút`;
   const h = Math.floor(m / 60);
   const m2 = m % 60;
   return m2 > 0 ? `${h} giờ ${m2} phút` : `${h} giờ`;
@@ -95,6 +107,11 @@ const IconArrowNav = ({ dir }) => (
     )}
   </svg>
 );
+const IconCheck = () => (
+  <svg className="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
 
 export default function LessonLearnPage() {
   const { courseId, lessonId } = useParams();
@@ -107,6 +124,24 @@ export default function LessonLearnPage() {
   const [tocOpen, setTocOpen] = useState(true);
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
+  const [lessonProgressById, setLessonProgressById] = useState({});
+  const [courseProgress, setCourseProgress] = useState(null);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [quiz, setQuiz] = useState(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quizData, setQuizData] = useState(null);
+  const [quizAttempt, setQuizAttempt] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [quizResult, setQuizResult] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const timerRef = useRef(null);
+
+  const videoRef = useRef(null);
+  const videoSegmentStartRef = useRef(Date.now());
+  const textStudyAccumRef = useRef(0);
+  const videoCompleteSentRef = useRef(false);
 
   const videoUrl = useMemo(() => {
     if (!lesson?.video_url) return null;
@@ -136,9 +171,48 @@ export default function LessonLearnPage() {
     setBookmarked(set.has(String(id)));
   }, []);
 
+  const patchLessonProgress = useCallback(
+    async ({ time_spent = 0, progress_percentage, is_completed } = {}) => {
+      if (!lessonId) return;
+      const v = videoRef.current;
+      let pct = progress_percentage;
+      if (pct == null && v && v.duration > 0 && !Number.isNaN(v.duration)) {
+        pct = Math.min(100, Math.round((v.currentTime / v.duration) * 1000) / 10);
+      }
+      if (pct == null) pct = 0;
+      try {
+        const res = await progressService.updateLessonProgress(lessonId, {
+          time_spent,
+          progress_percentage: pct,
+          ...(is_completed !== undefined ? { is_completed } : {}),
+        });
+        if (res?.success && res.data?.lesson_progress) {
+          const lp = res.data.lesson_progress;
+          setLessonProgressById((prev) => ({ ...prev, [String(lp.lesson_id || lessonId)]: lp }));
+          if (res.data.course_progress) setCourseProgress(res.data.course_progress);
+          if (Number(lp.is_completed) === 1) setIsCompleted(true);
+        }
+      } catch (err) {
+        const st = err?.response?.status;
+        const msg = err?.response?.data?.message;
+        if (st === 403) {
+          toast.error(msg || 'Không thể lưu tiến độ — cần ghi danh khóa học (hoặc chỉ xem bài miễn phí).');
+        }
+      }
+    },
+    [lessonId]
+  );
+
   useEffect(() => {
     if (lessonId) syncBookmark(lessonId);
   }, [lessonId, syncBookmark]);
+
+  useEffect(() => {
+    if (lessonId) {
+      const prog = lessonProgressById[String(lessonId)];
+      setIsCompleted(!!(prog && Number(prog.is_completed) === 1));
+    }
+  }, [lessonId, lessonProgressById]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -170,6 +244,26 @@ export default function LessonLearnPage() {
         if (listRes.success && listRes.data?.lessons) {
           setLessons(listRes.data.lessons);
         }
+
+        try {
+          const [progList, progCourse] = await Promise.all([
+            progressService.getLessonProgressByCourse(courseId),
+            progressService.getCourseProgress(courseId),
+          ]);
+          if (progList?.success && Array.isArray(progList.data?.lesson_progress)) {
+            const m = {};
+            for (const row of progList.data.lesson_progress) {
+              m[String(row.lesson_id)] = row;
+            }
+            setLessonProgressById(m);
+            setIsCompleted(!!(m[String(lessonId)] && Number(m[String(lessonId)].is_completed) === 1));
+          }
+          if (progCourse?.success && progCourse.data?.course_progress) {
+            setCourseProgress(progCourse.data.course_progress);
+          }
+        } catch {
+          /* chưa có tiến độ / lỗi mạng — bỏ qua */
+        }
       } catch (err) {
         const msg = err.response?.data?.message || 'Không tải được bài học';
         const code = err.response?.status;
@@ -183,6 +277,88 @@ export default function LessonLearnPage() {
     if (courseId && lessonId) load();
   }, [courseId, lessonId, navigate]);
 
+  useEffect(() => {
+    textStudyAccumRef.current = 0;
+    videoCompleteSentRef.current = false;
+  }, [lessonId]);
+
+  useLayoutEffect(() => {
+    if (!lessonId || !videoUrl) return undefined;
+    const el = videoRef.current;
+    if (!el) return undefined;
+
+    const onPlay = () => {
+      videoSegmentStartRef.current = Date.now();
+    };
+
+    const markVideoComplete = () => {
+      if (videoCompleteSentRef.current) return;
+      videoCompleteSentRef.current = true;
+      void patchLessonProgress({
+        time_spent: 0,
+        progress_percentage: 100,
+        is_completed: 1,
+      });
+      videoSegmentStartRef.current = Date.now();
+    };
+
+    const onTimeUpdate = () => {
+      const v = videoRef.current;
+      if (!v || v.paused || v.ended) return;
+      const dur = v.duration;
+      if (dur > 0 && !Number.isNaN(dur) && v.currentTime >= dur - 0.5) {
+        markVideoComplete();
+        return;
+      }
+      const now = Date.now();
+      if (now - videoSegmentStartRef.current < 8000) return;
+      videoSegmentStartRef.current = now;
+      void patchLessonProgress({ time_spent: 8 });
+    };
+
+    const onPause = () => {
+      const v = videoRef.current;
+      if (!v || v.ended) return;
+      const dur = v.duration;
+      if (dur > 0 && !Number.isNaN(dur) && v.currentTime >= dur - 0.5) {
+        markVideoComplete();
+        return;
+      }
+      const now = Date.now();
+      const wall = Math.max(0, Math.floor((now - videoSegmentStartRef.current) / 1000));
+      if (wall < 3) return;
+      videoSegmentStartRef.current = now;
+      void patchLessonProgress({ time_spent: wall });
+    };
+
+    const onEnded = () => {
+      markVideoComplete();
+    };
+
+    el.addEventListener('play', onPlay);
+    el.addEventListener('timeupdate', onTimeUpdate);
+    el.addEventListener('pause', onPause);
+    el.addEventListener('ended', onEnded);
+    return () => {
+      el.removeEventListener('play', onPlay);
+      el.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('pause', onPause);
+      el.removeEventListener('ended', onEnded);
+    };
+  }, [lessonId, videoUrl, patchLessonProgress]);
+
+  useEffect(() => {
+    if (!lessonId || videoUrl) return undefined;
+    textStudyAccumRef.current = 0;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      textStudyAccumRef.current += 30;
+      const pct = Math.min(100, Math.round((textStudyAccumRef.current / 90) * 100));
+      void patchLessonProgress({ time_spent: 30, progress_percentage: pct });
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [lessonId, videoUrl, patchLessonProgress]);
+
   const toggleBookmark = () => {
     if (!lessonId) return;
     const set = readBookmarks();
@@ -195,6 +371,128 @@ export default function LessonLearnPage() {
     writeBookmarks(set);
     setBookmarked(set.has(id));
     toast.success(set.has(id) ? 'Đã đánh dấu trang' : 'Đã bỏ đánh dấu');
+  };
+
+  const handleComplete = async () => {
+    if (!lessonId) return;
+    try {
+      const res = await progressService.updateLessonProgress(lessonId, {
+        progress_percentage: 100,
+        is_completed: 1,
+      });
+      if (res?.success) {
+        setIsCompleted(true);
+        if (res.data?.lesson_progress) {
+          const lp = res.data.lesson_progress;
+          setLessonProgressById((prev) => ({ ...prev, [String(lp.lesson_id || lessonId)]: lp }));
+        }
+        if (res.data?.course_progress) setCourseProgress(res.data.course_progress);
+        toast.success('Bạn đã hoàn thành bài học này!');
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message;
+      toast.error(msg || 'Không thể đánh dấu hoàn thành');
+    }
+  };
+
+  const loadQuiz = useCallback(async () => {
+    if (!lessonId || !isCompleted) return;
+    setQuizLoading(true);
+    try {
+      const res = await quizService.getQuizByLesson(lessonId);
+      if (res?.data?.quiz) {
+        setQuiz(res.data.quiz);
+      }
+    } catch {
+      // không có quiz thì thôi
+    } finally {
+      setQuizLoading(false);
+    }
+  }, [lessonId, isCompleted]);
+
+  useEffect(() => {
+    if (isCompleted) {
+      loadQuiz();
+    }
+  }, [isCompleted, loadQuiz]);
+
+  const startQuiz = async () => {
+    if (!quiz?.id) return;
+    setShowQuiz(true);
+    setQuizResult(null);
+    setQuizAnswers({});
+    try {
+      const res = await quizService.getQuizForTake(quiz.id);
+      if (res?.data) {
+        setQuizData(res.data);
+        if (res.data.quiz?.time_limit > 0) {
+          setTimeLeft(res.data.quiz.time_limit * 60);
+          timerRef.current = setInterval(() => {
+            setTimeLeft((t) => {
+              if (t <= 1) {
+                clearInterval(timerRef.current);
+                handleSubmitQuiz(true);
+                return 0;
+              }
+              return t - 1;
+            });
+          }, 1000);
+        }
+      }
+      const startRes = await quizService.startQuiz(quiz.id);
+      if (startRes?.data?.attempt_id) {
+        setQuizAttempt({ id: startRes.data.attempt_id, number: startRes.data.attempt_number });
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Không thể bắt đầu bài kiểm tra');
+      setShowQuiz(false);
+    }
+  };
+
+  const handleSelectAnswer = (questionId, optionId) => {
+    setQuizAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+  };
+
+  const handleSubmitQuiz = async (autoSubmit = false) => {
+    if (!quizAttempt?.id || quizSubmitting) return;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    setQuizSubmitting(true);
+    const timeSpent = quizData?.quiz?.time_limit
+      ? (quizData.quiz.time_limit * 60) - (timeLeft || 0)
+      : 0;
+    try {
+      const answers = Object.entries(quizAnswers).map(([question_id, option_id]) => ({
+        question_id,
+        option_id,
+      }));
+      const res = await quizService.submitQuiz(quizAttempt.id, { answers, time_spent: timeSpent });
+      if (res?.data) {
+        setQuizResult(res.data.attempt);
+        toast.success(autoSubmit ? 'Hết giờ! Bài đã được nộp tự động.' : 'Đã nộp bài!');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Không thể nộp bài');
+    } finally {
+      setQuizSubmitting(false);
+    }
+  };
+
+  const closeQuiz = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setShowQuiz(false);
+    setQuizData(null);
+    setQuizAttempt(null);
+    setQuizAnswers({});
+    setQuizResult(null);
+    setTimeLeft(null);
+  };
+
+  const formatTimeLeft = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
   };
 
   if (loading) {
@@ -271,6 +569,10 @@ export default function LessonLearnPage() {
           <ul className="mt-1 space-y-0.5 pl-2 border-l border-zinc-800 ml-4">
             {lessons.map((l, idx) => {
               const active = String(l._id) === String(lesson._id);
+              const prog = lessonProgressById[String(l._id)];
+              const done = prog && Number(prog.is_completed) === 1;
+              const pct =
+                prog?.progress_percentage != null ? Math.round(Number(prog.progress_percentage)) : null;
               return (
                 <li key={l._id}>
                   <Link
@@ -282,10 +584,17 @@ export default function LessonLearnPage() {
                         : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                     }`}
                   >
-                    <IconVideo />
-                    <span className="leading-snug min-w-0">
-                      <span className="text-zinc-600 mr-1.5">{idx + 1}.</span>
-                      <span className="break-words">{l.title}</span>
+                    <span className="shrink-0 mt-0.5">{done ? <IconCheck /> : <IconVideo />}</span>
+                    <span className="leading-snug min-w-0 flex-1">
+                      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                        <span>
+                          <span className="text-zinc-600 mr-1.5">{idx + 1}.</span>
+                          <span className="break-words">{l.title}</span>
+                        </span>
+                        {!done && pct != null && pct > 0 ? (
+                          <span className="text-xs text-blue-400/90 tabular-nums">{pct}%</span>
+                        ) : null}
+                      </span>
                       {formatDurationClock(l.video_duration) ? (
                         <span className="block text-xs text-zinc-600 mt-0.5 font-normal tabular-nums">
                           {formatDurationVi(l.video_duration) || formatDurationClock(l.video_duration)}
@@ -382,14 +691,110 @@ export default function LessonLearnPage() {
               </div>
             </div>
 
+            {courseProgress ? (
+              <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-300">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-medium text-zinc-100">Tiến độ khóa học</span>
+                  <span className="text-zinc-600 hidden sm:inline">·</span>
+                  <span>
+                    {Math.min(100, Math.round(Number(courseProgress.progress_percentage) || 0))}% hoàn thành
+                  </span>
+                  <span className="text-zinc-600">·</span>
+                  <span>
+                    {Number(courseProgress.lessons_completed) || 0}/{Number(courseProgress.total_lessons) || 0}{' '}
+                    bài
+                  </span>
+                  <span className="text-zinc-600">·</span>
+                  <span className="text-zinc-400">
+                    Đã học ~{formatStudyTimeTotal(courseProgress.total_time_spent)}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.round(Number(courseProgress.progress_percentage) || 0))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
             {/* Bookmark */}
             <button
               type="button"
               onClick={toggleBookmark}
-              className="flex items-center gap-2 mb-6 text-sm text-zinc-400 hover:text-amber-400/90 transition-colors"
+              className="flex items-center gap-2 mb-4 text-sm text-zinc-400 hover:text-amber-400/90 transition-colors"
             >
               <IconBookmark filled={bookmarked} />
               <span>Đánh dấu trang này</span>
+            </button>
+
+            {/* Quiz section */}
+            {isCompleted && (
+              <div className="mb-6 rounded-xl border border-zinc-800 bg-gradient-to-r from-purple-900/30 to-indigo-900/30 p-4">
+                {quizLoading ? (
+                  <div className="flex items-center gap-3 text-zinc-400">
+                    <div className="w-5 h-5 border-2 border-zinc-600 border-t-purple-400 rounded-full animate-spin" />
+                    <span className="text-sm">Đang tải bài kiểm tra...</span>
+                  </div>
+                ) : quiz ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                        <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Kiểm tra kiến thức
+                      </h3>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        {quiz.title} — {quiz.question_count} câu hỏi
+                        {quiz.time_limit > 0 && ` · ${quiz.time_limit} phút`}
+                        {quiz.passing_score > 0 && ` · Đạt từ ${quiz.passing_score}%`}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={startQuiz}
+                      className="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Làm bài kiểm tra
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* Hoàn thành bài học */}
+            <button
+              type="button"
+              onClick={handleComplete}
+              disabled={isCompleted}
+              className={`flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isCompleted
+                  ? 'bg-emerald-500/20 text-emerald-400 cursor-default'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              }`}
+            >
+              {isCompleted ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Đã hoàn thành
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Hoàn thành bài học
+                </>
+              )}
             </button>
 
             {/* Video block */}
@@ -412,6 +817,7 @@ export default function LessonLearnPage() {
                 <div className="p-3 sm:p-4">
                   <div className="aspect-video w-full rounded-lg overflow-hidden bg-black ring-1 ring-zinc-800">
                     <video
+                      ref={videoRef}
                       key={videoUrl}
                       controls
                       autoPlay={false}
@@ -468,6 +874,199 @@ export default function LessonLearnPage() {
           </div>
         </main>
       </div>
+
+      {/* Quiz Modal */}
+      {showQuiz && quizData && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl max-h-[90vh] bg-[#1a1a2e] rounded-2xl border border-zinc-700 flex flex-col overflow-hidden">
+            {/* Quiz Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-700 bg-[#16162a]">
+              <div>
+                <h2 className="text-lg font-semibold text-white">{quizData.quiz?.title || 'Bài kiểm tra'}</h2>
+                {quizData.quiz?.description && (
+                  <p className="text-sm text-zinc-400 mt-1">{quizData.quiz.description}</p>
+                )}
+              </div>
+              {timeLeft != null && timeLeft > 0 && (
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${timeLeft < 60 ? 'bg-red-600' : 'bg-zinc-800'}`}>
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-white font-mono font-semibold">{formatTimeLeft(timeLeft)}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={closeQuiz}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Quiz Content - Hiển thị kết quả */}
+            {quizResult ? (
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className={`text-center py-8 ${quizResult.is_passed ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center ${quizResult.is_passed ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
+                    {quizResult.is_passed ? (
+                      <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                  </div>
+                  <h3 className="text-2xl font-bold mt-4">
+                    {quizResult.is_passed ? 'Chúc mừng! Bạn đã đạt!' : 'Chưa đạt. Cố gắng lần sau!'}
+                  </h3>
+                  <p className="text-4xl font-bold mt-2">{quizResult.score}%</p>
+                  <p className="text-zinc-400 mt-2">
+                    {quizResult.earned_points}/{quizResult.total_points} điểm
+                    · Điểm đạt: {quizData.quiz?.passing_score || 0}%
+                  </p>
+                </div>
+
+                {/* Hiển thị đáp án đúng */}
+                {quizData.quiz?.show_correct_answer && (
+                  <div className="mt-6 space-y-4">
+                    <h4 className="text-lg font-semibold text-white">Đáp án</h4>
+                    {quizData.questions?.map((q, idx) => {
+                      const selectedOptionId = quizAnswers[q.id];
+                      const correctOption = q.options?.find((o) => o.is_correct);
+                      const isCorrect = selectedOptionId === correctOption?.id;
+                      return (
+                        <div key={q.id} className={`p-4 rounded-xl border ${isCorrect ? 'border-emerald-600 bg-emerald-900/20' : 'border-red-600 bg-red-900/20'}`}>
+                          <div className="flex items-start gap-3">
+                            <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${isCorrect ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                              {idx + 1}
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-zinc-100 font-medium">{q.question_text}</p>
+                              <div className="mt-3 space-y-2">
+                                {q.options?.map((opt) => {
+                                  const isSelected = opt.id === selectedOptionId;
+                                  const isCorrectOpt = opt.is_correct;
+                                  return (
+                                    <div
+                                      key={opt.id}
+                                      className={`p-3 rounded-lg text-sm ${
+                                        isCorrectOpt
+                                          ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500'
+                                          : isSelected
+                                          ? 'bg-red-600/30 text-red-300 border border-red-500'
+                                          : 'bg-zinc-800/50 text-zinc-400'
+                                      }`}
+                                    >
+                                      {opt.option_text}
+                                      {isCorrectOpt && <span className="ml-2 text-emerald-400">✓ Đáp án đúng</span>}
+                                      {isSelected && !isCorrectOpt && <span className="ml-2 text-red-400">✗ Bạn chọn</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {q.explanation && (
+                                <p className="mt-3 text-sm text-zinc-400 italic">Giải thích: {q.explanation}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="mt-6 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={closeQuiz}
+                    className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+                  >
+                    Quay lại bài học
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Quiz Questions */
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                  {quizData.questions?.map((q, idx) => (
+                    <div key={q.id} className="p-5 rounded-xl bg-zinc-800/50 border border-zinc-700">
+                      <div className="flex items-start gap-3 mb-4">
+                        <span className="shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
+                          {idx + 1}
+                        </span>
+                        <p className="text-zinc-100 font-medium text-lg leading-relaxed">{q.question_text}</p>
+                      </div>
+                      <div className="space-y-3 ml-11">
+                        {q.options?.map((opt) => {
+                          const isSelected = quizAnswers[q.id] === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => handleSelectAnswer(q.id, opt.id)}
+                              className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                                isSelected
+                                  ? 'border-purple-500 bg-purple-500/20 text-white'
+                                  : 'border-zinc-600 bg-zinc-800/50 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-700/50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                  isSelected ? 'border-purple-500 bg-purple-500' : 'border-zinc-500'
+                                }`}>
+                                  {isSelected && (
+                                    <span className="w-2.5 h-2.5 rounded-full bg-white" />
+                                  )}
+                                </span>
+                                <span>{opt.option_text}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quiz Footer - Nút nộp bài */}
+            {!quizResult && (
+              <div className="px-6 py-4 border-t border-zinc-700 bg-[#16162a] flex justify-between items-center">
+                <p className="text-sm text-zinc-400">
+                  {Object.keys(quizAnswers).length}/{quizData.questions?.length || 0} câu đã trả lời
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleSubmitQuiz(false)}
+                  disabled={quizSubmitting}
+                  className="px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-600 disabled:cursor-not-allowed text-white font-medium transition-colors flex items-center gap-2"
+                >
+                  {quizSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Đang nộp...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Nộp bài
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <style>{`
         .lesson-content-dark ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.75rem 0; }

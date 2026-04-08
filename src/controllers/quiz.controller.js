@@ -34,6 +34,61 @@ function stripCorrectFlags(questions, shuffleOptions) {
 }
 
 const quizController = {
+    /** GET /api/quizzes/lesson/:lessonId — lấy quiz gắn với lesson hoặc course */
+    getQuizByLesson: async (req, res) => {
+        try {
+            const { lessonId } = req.params;
+            const lesson = require('../models/lesson.model').findById(lessonId);
+            if (!lesson) {
+                return res.status(404).json({ success: false, message: 'Lesson không tồn tại' });
+            }
+
+            // 1. Tìm quiz gắn với lesson cụ thể
+            let quiz = await Quiz.findOne({
+                lesson_id: lessonId,
+                is_active: 1
+            }).populate('course_id', 'title').populate('lesson_id', 'title');
+
+            // 2. Nếu không có, tìm quiz cấp khóa học (lesson_id = null)
+            if (!quiz) {
+                quiz = await Quiz.findOne({
+                    course_id: lesson.course_id,
+                    lesson_id: null,
+                    is_active: 1
+                }).populate('course_id', 'title');
+            }
+
+            if (!quiz) {
+                return res.json({ success: true, data: { quiz: null } });
+            }
+
+            // Đếm số câu hỏi
+            const questionCount = await QuizQuestion.countDocuments({
+                quiz_id: quiz._id,
+                is_active: 1
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    quiz: {
+                        id: quiz._id,
+                        title: quiz.title,
+                        description: quiz.description,
+                        passing_score: quiz.passing_score,
+                        time_limit: quiz.time_limit,
+                        max_attempts: quiz.max_attempts,
+                        question_count: questionCount,
+                        show_correct_answer: quiz.show_correct_answer,
+                        show_results_immediately: quiz.show_results_immediately
+                    }
+                }
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
     listByCourse: async (req, res) => {
         try {
             const { courseId } = req.params;
@@ -44,9 +99,24 @@ const quizController = {
         }
     },
 
+    /** GET /api/quizzes — admin: toàn bộ quiz + populate khóa học / bài học */
+    listAll: async (req, res) => {
+        try {
+            const quizzes = await Quiz.find()
+                .sort({ created_at: -1 })
+                .populate('course_id', 'title')
+                .populate('lesson_id', 'title');
+            res.json({ success: true, data: { quizzes } });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
     getQuizDetail: async (req, res) => {
         try {
-            const quiz = await Quiz.findById(req.params.id);
+            const quiz = await Quiz.findById(req.params.id)
+                .populate('course_id', 'title')
+                .populate('lesson_id', 'title');
             if (!quiz) {
                 return res.status(404).json({ success: false, message: 'Quiz không tồn tại' });
             }
@@ -135,6 +205,24 @@ const quizController = {
                 return res.status(404).json({ success: false, message: 'Quiz không tồn tại' });
             }
             res.json({ success: true, data: { quiz } });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
+    deleteQuiz: async (req, res) => {
+        try {
+            const quiz = await Quiz.findById(req.params.id);
+            if (!quiz) {
+                return res.status(404).json({ success: false, message: 'Quiz không tồn tại' });
+            }
+            const questions = await QuizQuestion.find({ quiz_id: quiz._id });
+            for (const q of questions) {
+                await QuestionOption.deleteMany({ question_id: q._id });
+            }
+            await QuizQuestion.deleteMany({ quiz_id: quiz._id });
+            await quiz.deleteOne();
+            res.json({ success: true, message: 'Đã xóa quiz' });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
         }
