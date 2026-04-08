@@ -12,7 +12,18 @@ const StarIcon = () => (
   </svg>
 );
 
-export default function Hero() {
+function formatCount(n) {
+  const num = Number(n) || 0;
+  return `${num.toLocaleString('vi-VN')}+`;
+}
+
+export default function Hero({ stats }) {
+  const loading = !stats;
+  const rating = stats?.average_rating ?? 0;
+  const students = stats?.student_count ?? 0;
+  const courses = stats?.course_count ?? 0;
+  const spotlight = stats?.spotlight_course;
+
   return (
     <section className="relative bg-gradient-to-br from-primary-50 via-white to-primary-100 overflow-hidden pt-20">
       {/* Background decorations */}
@@ -41,18 +52,38 @@ export default function Hero() {
             <div className="flex flex-wrap gap-4 mb-8 justify-center lg:justify-start">
               <div className="flex items-center gap-1 text-sm text-gray-600">
                 <span className="text-yellow-400"><StarIcon /></span>
-                <span className="font-semibold text-gray-900">4.8</span>
-                <span>đánh giá</span>
+                {loading ? (
+                  <span className="h-4 w-10 bg-gray-200 rounded animate-pulse inline-block" />
+                ) : (
+                  <>
+                    <span className="font-semibold text-gray-900">
+                      {rating > 0 ? rating.toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
+                    </span>
+                    <span>đánh giá</span>
+                  </>
+                )}
               </div>
               <div className="w-px h-4 bg-gray-300" />
               <div className="flex items-center gap-1 text-sm text-gray-600">
-                <span className="font-semibold text-gray-900">15,000+</span>
-                <span>học viên</span>
+                {loading ? (
+                  <span className="h-4 w-20 bg-gray-200 rounded animate-pulse inline-block" />
+                ) : (
+                  <>
+                    <span className="font-semibold text-gray-900">{formatCount(students)}</span>
+                    <span>học viên</span>
+                  </>
+                )}
               </div>
               <div className="w-px h-4 bg-gray-300" />
               <div className="flex items-center gap-1 text-sm text-gray-600">
-                <span className="font-semibold text-gray-900">500+</span>
-                <span>khóa học</span>
+                {loading ? (
+                  <span className="h-4 w-16 bg-gray-200 rounded animate-pulse inline-block" />
+                ) : (
+                  <>
+                    <span className="font-semibold text-gray-900">{formatCount(courses)}</span>
+                    <span>khóa học</span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -78,14 +109,35 @@ export default function Hero() {
                     <span className="text-2xl">📚</span>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900">Lập trình Web</h3>
-                    <p className="text-sm text-gray-500">32 bài học</p>
+                    <h3 className="font-semibold text-gray-900">
+                      {loading ? (
+                        <span className="block h-5 w-40 bg-gray-200 rounded animate-pulse" />
+                      ) : (
+                        spotlight?.title || 'Khóa học nổi bật'
+                      )}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {loading ? (
+                        <span className="inline-block mt-1 h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                      ) : (
+                        `${spotlight?.lesson_count ?? 0} bài học`
+                      )}
+                    </p>
                   </div>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full w-3/4 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full" />
+                  <div
+                    className="h-full bg-gradient-to-r from-primary-500 to-primary-600 rounded-full transition-all duration-500"
+                    style={{ width: `${loading ? 0 : Math.min(100, spotlight?.progress_percent ?? 0)}%` }}
+                  />
                 </div>
-                <p className="text-sm text-primary-600 mt-2 font-medium">75% hoàn thành</p>
+                <p className="text-sm text-primary-600 mt-2 font-medium">
+                  {loading ? (
+                    <span className="inline-block h-4 w-28 bg-primary-100 rounded animate-pulse" />
+                  ) : (
+                    `${Math.min(100, spotlight?.progress_percent ?? 0)}% hoàn thành`
+                  )}
+                </p>
               </div>
 
               {/* Floating cards */}

@@ -50,6 +50,7 @@ const lessonRoutes = require('./routes/lesson.routes');
 const paymentRoutes = require('./routes/payment.routes');
 const progressRoutes = require('./routes/progress.routes');
 const quizRoutes = require('./routes/quiz.routes');
+const statsRoutes = require('./routes/stats.routes');
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -61,6 +62,7 @@ app.use('/api/lessons', lessonRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/quizzes', quizRoutes);
+app.use('/api/stats', statsRoutes);
 
 // 404 handler
 app.use((req, res) => {
