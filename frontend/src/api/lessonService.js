@@ -6,7 +6,7 @@ export const lessonService = {
     return data;
   },
 
-  /** Admin: đầy đủ content, objectives, cover_image */
+  /** Admin: đầy đủ content (JWT + role admin) */
   async getLessonsByCourseAdmin(courseId) {
     const { data } = await api.get(`/lessons/admin/course/${courseId}`);
     return data;

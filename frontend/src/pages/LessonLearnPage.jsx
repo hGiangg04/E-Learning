@@ -224,7 +224,6 @@ export default function LessonLearnPage() {
 
   const durationClock = formatDurationClock(lesson.video_duration);
   const durationVi = formatDurationVi(lesson.video_duration);
-  const hasObjectives = hasText(lesson.objectives);
   const hasContent = hasText(lesson.content);
 
   const lessonHtmlClass =
@@ -445,32 +444,6 @@ export default function LessonLearnPage() {
                 )}
               </div>
             )}
-
-            <section className="mb-10">
-              <h2 className="flex items-center gap-2.5 text-base font-semibold text-zinc-100 mb-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                </span>
-                Mục tiêu bài học
-              </h2>
-              {hasObjectives ? (
-                <div
-                  className={lessonHtmlClass}
-                  dangerouslySetInnerHTML={{ __html: lesson.objectives }}
-                />
-              ) : (
-                <p className="text-sm text-zinc-500">
-                  Chưa có mục tiêu bài học. Nội dung sẽ hiển thị tại đây khi được cập nhật trong quản trị.
-                </p>
-              )}
-            </section>
 
             <section className="mb-10">
               <h2 className="flex items-center gap-2.5 text-base font-semibold text-zinc-100 mb-4">
