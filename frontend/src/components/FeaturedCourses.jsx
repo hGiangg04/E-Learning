@@ -12,10 +12,17 @@ export default function FeaturedCourses() {
     fetchCourses();
   }, []);
 
+  const normalizeCourse = (c) => ({
+    ...c,
+    category: c.category || c.category_id,
+    instructor: c.instructor || c.instructor_id,
+  });
+
   const fetchCourses = async () => {
     try {
-      const response = await courseService.getAll({ limit: 8, is_published: true });
-      setCourses(response.data.courses || response.data);
+      const response = await courseService.getAll({ limit: 8, sort: '-created_at' });
+      const raw = response.data?.data?.courses || [];
+      setCourses(raw.map(normalizeCourse));
     } catch (error) {
       console.error('Lỗi khi tải khóa học:', error);
       // Demo data

@@ -1,4 +1,5 @@
 import Navbar from '../components/Navbar';
+import BannerCarousel from '../components/BannerCarousel';
 import Hero from '../components/Hero';
 import Categories from '../components/Categories';
 import FeaturedCourses from '../components/FeaturedCourses';
@@ -7,9 +8,10 @@ import Footer from '../components/Footer';
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col w-full">
       <Navbar />
-      <main className="flex-1">
+      <main className="flex-1 w-full">
+        <BannerCarousel />
         <Hero />
         <Categories />
         <FeaturedCourses />

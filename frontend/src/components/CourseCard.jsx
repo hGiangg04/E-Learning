@@ -22,18 +22,18 @@ export default function CourseCard({ course }) {
   const {
     _id,
     title,
-    description,
     thumbnail,
     price,
     discount_price,
-    instructor,
     average_rating,
     review_count,
     student_count,
     duration_hours,
     level,
-    category
   } = course;
+
+  const category = course.category || course.category_id;
+  const instructor = course.instructor || course.instructor_id;
 
   const discountedPrice = discount_price || price;
   const hasDiscount = discount_price && discount_price < price;
@@ -58,11 +58,6 @@ export default function CourseCard({ course }) {
       currency: 'VND',
       maximumFractionDigits: 0
     }).format(price);
-  };
-
-  const truncateText = (text, maxLength = 80) => {
-    if (!text) return '';
-    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
   return (
@@ -122,10 +117,10 @@ export default function CourseCard({ course }) {
 
         {/* Stats */}
         <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-          {average_rating !== undefined && (
+          {average_rating != null && !Number.isNaN(Number(average_rating)) && (
             <div className="flex items-center gap-1">
               <StarIcon />
-              <span className="font-medium text-gray-700">{average_rating.toFixed(1)}</span>
+              <span className="font-medium text-gray-700">{Number(average_rating).toFixed(1)}</span>
               <span>({review_count || 0})</span>
             </div>
           )}

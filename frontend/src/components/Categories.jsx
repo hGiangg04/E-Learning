@@ -15,7 +15,8 @@ export default function Categories() {
   const fetchCategories = async () => {
     try {
       const response = await categoryService.getAll();
-      const activeCategories = response.data.filter(cat => cat.is_active !== false);
+      const list = response.data?.data?.categories || [];
+      const activeCategories = list.filter((cat) => cat.is_active !== 0 && cat.is_active !== false);
       setCategories(activeCategories);
     } catch (error) {
       console.error('Lỗi khi tải danh mục:', error);

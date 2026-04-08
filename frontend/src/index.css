@@ -22,7 +22,7 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
   #root {
-    @apply w-full max-w-[1280px] mx-auto text-center min-h-screen flex flex-col;
+    @apply w-full min-h-screen flex flex-col;
   }
 }
 

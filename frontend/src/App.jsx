@@ -1,6 +1,15 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import CoursesPage from './pages/CoursesPage';
+import CourseDetailPage from './pages/CourseDetailPage';
+import AboutPage from './pages/AboutPage';
+import CategoriesPage from './pages/CategoriesPage';
+import ProfilePage from './pages/ProfilePage';
+import MyCoursesPage from './pages/MyCoursesPage';
 import './index.css';
 
 // Admin Pages
@@ -19,6 +28,15 @@ function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/courses" element={<CoursesPage />} />
+        <Route path="/courses/:id" element={<CourseDetailPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/categories" element={<CategoriesPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/my-courses" element={<MyCoursesPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={<DashboardPage />} />

@@ -34,11 +34,14 @@ export default function Navbar() {
   const location = useLocation();
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-  }, []);
+    const syncUser = () => {
+      const storedUser = localStorage.getItem('user');
+      setUser(storedUser ? JSON.parse(storedUser) : null);
+    };
+    syncUser();
+    window.addEventListener('auth-changed', syncUser);
+    return () => window.removeEventListener('auth-changed', syncUser);
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -56,6 +59,7 @@ export default function Navbar() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
+    window.dispatchEvent(new Event('auth-changed'));
     navigate('/');
   };
 
