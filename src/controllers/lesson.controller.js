@@ -3,11 +3,19 @@ const Lesson = require('../models/lesson.model');
 const Course = require('../models/course.model');
 const Enrollment = require('../models/enrollment.model');
 
+/**
+ * Lấy collection native (bypass Mongoose schema) để đọc/ghi trực tiếp.
+ * Cần thiết vì một số document cũ được insert không qua Mongoose,
+ * dẫn đến _id / course_id có thể không đúng kiểu ObjectId mà Mongoose mong đợi.
+ */
+function getLessonCollection() {
+    return mongoose.connection.db.collection('lessons');
+}
+
 const LESSON_WRITABLE_FIELDS = [
     'title',
     'content',
     'objectives',
-    'cover_image',
     'video_url',
     'video_duration',
     'position',
@@ -33,7 +41,7 @@ function pickLessonPayload(body) {
             }
             continue;
         }
-        if (key === 'cover_image' || key === 'objectives' || key === 'content') {
+        if (key === 'objectives' || key === 'content') {
             out[key] = body[key] == null ? '' : String(body[key]);
             continue;
         }
@@ -69,6 +77,8 @@ const lessonController = {
     },
 
     // GET /api/lessons/course/:courseId — sắp xếp theo position
+    // ?admin=1 → admin: trả đủ trường (content/objectives/cover), không lọc is_published
+    // không có admin → chỉ trả list ngắn gọn (không content/objectives), chỉ bài published
     getLessonsByCourse: async (req, res) => {
         try {
             if (!mongoose.Types.ObjectId.isValid(req.params.courseId)) {
@@ -78,12 +88,21 @@ const lessonController = {
                 });
             }
 
-            const lessons = await Lesson.find({
-                course_id: req.params.courseId,
-                is_published: 1
-            })
-                .sort({ position: 1 })
-                .select('-content -objectives');
+            const isAdmin = req.query.admin === '1';
+            console.log('[GET /lessons/course/' + req.params.courseId + '] isAdmin=', isAdmin);
+
+            let query = { course_id: req.params.courseId };
+            if (!isAdmin) {
+                query.is_published = 1;
+            }
+
+            let dbQuery = Lesson.find(query).sort({ position: 1 });
+            if (!isAdmin) {
+                dbQuery = dbQuery.select('-content -objectives');
+            }
+
+            const lessons = await dbQuery;
+            console.log('[GET] trả về', lessons.length, 'bài, trường objectives đầu tiên:', JSON.stringify(lessons[0]?.objectives));
 
             res.json({
                 success: true,
@@ -198,7 +217,7 @@ const lessonController = {
         }
     },
 
-    // PUT /api/lessons/:id — đổi thứ tự: gửi position mới
+    // PUT /api/lessons/:id — dùng native MongoDB collection (bypass Mongoose schema)
     updateLesson: async (req, res) => {
         try {
             const payload = pickLessonPayload(req.body);
@@ -206,25 +225,41 @@ const lessonController = {
                 delete payload.course_id;
             }
 
-            const lesson = await Lesson.findByIdAndUpdate(
-                req.params.id,
-                { ...payload, updated_at: Date.now() },
-                { new: true, runValidators: true }
-            );
+            // _id trong DB là ObjectId — phải convert chuỗi thành ObjectId để query khớp
+            const filter = { _id: new mongoose.Types.ObjectId(req.params.id) };
+            const updateDoc = {
+                $set: {
+                    title:          payload.title,
+                    content:        payload.content,
+                    objectives:     payload.objectives,
+                    video_url:      payload.video_url,
+                    video_duration: payload.video_duration,
+                    position:       payload.position,
+                    is_free:        payload.is_free,
+                    is_published:   payload.is_published,
+                    updated_at:     new Date(),
+                }
+            };
 
-            if (!lesson) {
+            const col = getLessonCollection();
+            const result = await col.updateOne(filter, updateDoc);
+
+            if (result.matchedCount === 0) {
                 return res.status(404).json({
                     success: false,
                     message: 'Bài học không tồn tại'
                 });
             }
 
+            const updated = await col.findOne(filter);
+
             res.json({
                 success: true,
                 message: 'Cập nhật bài học thành công',
-                data: { lesson }
+                data: { lesson: updated }
             });
         } catch (error) {
+            console.error('[PUT /lessons/:id] LỖI:', error.message);
             res.status(500).json({
                 success: false,
                 message: error.message

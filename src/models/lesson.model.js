@@ -20,11 +20,6 @@ const lessonSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
-    /** Ảnh minh họa / banner bài học (URL hoặc base64) */
-    cover_image: {
-        type: String,
-        default: ''
-    },
     video_url: {
         type: String,
         default: ''

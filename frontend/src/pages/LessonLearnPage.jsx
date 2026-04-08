@@ -20,31 +20,30 @@ function writeBookmarks(set) {
   localStorage.setItem(BOOKMARK_KEY, JSON.stringify([...set]));
 }
 
-function youtubeEmbedUrl(url) {
-  if (!url || typeof url !== 'string') return null;
-  const s = url.trim();
-  try {
-    const u = new URL(s);
-    if (u.hostname.includes('youtube.com')) {
-      const v = u.searchParams.get('v');
-      if (v) return `https://www.youtube.com/embed/${v}`;
-    }
-    if (u.hostname === 'youtu.be') {
-      const id = u.pathname.replace(/^\//, '').split('/')[0];
-      if (id) return `https://www.youtube.com/embed/${id}`;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 function formatDurationClock(sec) {
   if (sec == null || Number(sec) <= 0) return null;
   const n = Math.floor(Number(sec));
   const m = Math.floor(n / 60);
   const s = n % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatDurationVi(sec) {
+  if (sec == null || Number(sec) <= 0) return null;
+  const n = Math.floor(Number(sec));
+  if (n < 60) return `${n} giây`;
+  const m = Math.floor(n / 60);
+  const s = n % 60;
+  if (m < 60) return s > 0 ? `${m} phút ${s} giây` : `${m} phút`;
+  const h = Math.floor(m / 60);
+  const m2 = m % 60;
+  return m2 > 0 ? `${h} giờ ${m2} phút` : `${h} giờ`;
+}
+
+function hasText(htmlOrText) {
+  if (htmlOrText == null) return false;
+  const s = String(htmlOrText).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.length > 0;
 }
 
 const IconBack = () => (
@@ -109,7 +108,14 @@ export default function LessonLearnPage() {
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
 
-  const embedUrl = useMemo(() => youtubeEmbedUrl(lesson?.video_url), [lesson?.video_url]);
+  const videoUrl = useMemo(() => {
+    if (!lesson?.video_url) return null;
+    const url = String(lesson.video_url);
+    if (url.startsWith('/uploads/videos/')) {
+      return import.meta.env.VITE_API_URL + url;
+    }
+    return url;
+  }, [lesson?.video_url]);
 
   const lessonIndex = useMemo(() => {
     if (!lesson?._id || !lessons.length) return -1;
@@ -210,7 +216,10 @@ export default function LessonLearnPage() {
     );
   }
 
-  const durationLabel = formatDurationClock(lesson.video_duration);
+  const durationClock = formatDurationClock(lesson.video_duration);
+  const durationVi = formatDurationVi(lesson.video_duration);
+  const hasObjectives = hasText(lesson.objectives);
+  const hasContent = hasText(lesson.content);
 
   const lessonHtmlClass =
     'lesson-content-dark max-w-none text-sm sm:text-base leading-relaxed text-zinc-300 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-white [&_h1]:mt-6 [&_h1]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-100 [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-zinc-200 [&_h3]:mt-4 [&_h3]:mb-2 [&_p]:my-2 [&_strong]:text-zinc-100 [&_a]:text-blue-400 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-3 [&_li]:my-1';
@@ -269,9 +278,14 @@ export default function LessonLearnPage() {
                     }`}
                   >
                     <IconVideo />
-                    <span className="leading-snug">
+                    <span className="leading-snug min-w-0">
                       <span className="text-zinc-600 mr-1.5">{idx + 1}.</span>
-                      {l.title}
+                      <span className="break-words">{l.title}</span>
+                      {formatDurationClock(l.video_duration) ? (
+                        <span className="block text-xs text-zinc-600 mt-0.5 font-normal tabular-nums">
+                          {formatDurationVi(l.video_duration) || formatDurationClock(l.video_duration)}
+                        </span>
+                      ) : null}
                     </span>
                   </Link>
                 </li>
@@ -367,102 +381,111 @@ export default function LessonLearnPage() {
             <button
               type="button"
               onClick={toggleBookmark}
-              className="flex items-center gap-2 mb-8 text-sm text-zinc-400 hover:text-amber-400/90 transition-colors"
+              className="flex items-center gap-2 mb-6 text-sm text-zinc-400 hover:text-amber-400/90 transition-colors"
             >
               <IconBookmark filled={bookmarked} />
               <span>Đánh dấu trang này</span>
             </button>
 
-            {lesson.cover_image && (
-              <div className="mb-10 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900/50 max-w-3xl shadow-lg">
-                <img
-                  src={lesson.cover_image}
-                  alt=""
-                  className="w-full max-h-[22rem] object-cover"
-                />
-              </div>
-            )}
-
-            {lesson.objectives ? (
-              <section className="mb-10">
-                <h2 className="flex items-center gap-2.5 text-base font-semibold text-zinc-100 mb-4">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                  </span>
-                  Mục tiêu bài học
-                </h2>
-                <div
-                  className={lessonHtmlClass}
-                  dangerouslySetInnerHTML={{ __html: lesson.objectives }}
-                />
-              </section>
-            ) : null}
-
-            {lesson.content ? (
-              <section className="mb-10">
-                <h2 className="flex items-center gap-2.5 text-base font-semibold text-zinc-100 mb-4">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
-                      />
-                    </svg>
-                  </span>
-                  Nội dung bài học
-                </h2>
-                <div className={lessonHtmlClass} dangerouslySetInnerHTML={{ __html: lesson.content }} />
-              </section>
-            ) : null}
-
-            {!lesson.objectives && !lesson.content ? (
-              <p className="text-zinc-500 mb-10 text-sm">Chưa có nội dung văn bản cho bài này.</p>
-            ) : null}
-
             {/* Video block */}
-            {(embedUrl || lesson.video_url) && (
-              <section className="rounded-xl border border-zinc-800 bg-[#161616] overflow-hidden shadow-xl">
+            {videoUrl && (
+              <section className="rounded-xl border border-zinc-800 bg-[#161616] overflow-hidden shadow-xl mb-10">
                 <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
                   <h2 className="text-sm font-medium text-zinc-200">
-                    Video nội dung bài học
-                    {durationLabel ? (
-                      <span className="text-zinc-500 font-normal"> [{durationLabel} phút]</span>
+                    Video bài học
+                    {durationVi ? (
+                      <span className="text-zinc-500 font-normal">
+                        {' '}
+                        — {durationVi}
+                        {durationClock ? (
+                          <span className="tabular-nums text-zinc-600"> ({durationClock})</span>
+                        ) : null}
+                      </span>
                     ) : null}
                   </h2>
                 </div>
                 <div className="p-3 sm:p-4">
-                  {embedUrl ? (
-                    <div className="aspect-video w-full rounded-lg overflow-hidden bg-black ring-1 ring-zinc-800">
-                      <iframe
-                        title={lesson.title}
-                        src={embedUrl}
-                        className="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  ) : (
-                    <a
-                      href={lesson.video_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-center py-12 text-blue-400 hover:underline break-all px-2"
+                  <div className="aspect-video w-full rounded-lg overflow-hidden bg-black ring-1 ring-zinc-800">
+                    <video
+                      key={videoUrl}
+                      controls
+                      autoPlay={false}
+                      className="w-full h-full"
+                      preload="metadata"
                     >
-                      Mở video → {lesson.video_url}
-                    </a>
-                  )}
+                      <source src={videoUrl} />
+                      Trình duyệt của bạn không hỗ trợ phát video.
+                    </video>
+                  </div>
                 </div>
               </section>
             )}
+
+            {/* Thời lượng — chỉ hiển thị nếu không có video */}
+            {!videoUrl && (
+              <div className="mb-8">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-2">
+                  Thời lượng
+                </h2>
+                {durationVi ? (
+                  <p className="text-sm text-zinc-200">
+                    <span className="text-zinc-100 font-medium">{durationVi}</span>
+                    {durationClock ? (
+                      <span className="text-zinc-500 tabular-nums ml-2">({durationClock})</span>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-sm text-zinc-500">Chưa có thông tin thời lượng video.</p>
+                )}
+              </div>
+            )}
+
+            <section className="mb-10">
+              <h2 className="flex items-center gap-2.5 text-base font-semibold text-zinc-100 mb-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </span>
+                Mục tiêu bài học
+              </h2>
+              {hasObjectives ? (
+                <div
+                  className={lessonHtmlClass}
+                  dangerouslySetInnerHTML={{ __html: lesson.objectives }}
+                />
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  Chưa có mục tiêu bài học. Nội dung sẽ hiển thị tại đây khi được cập nhật trong quản trị.
+                </p>
+              )}
+            </section>
+
+            <section className="mb-10">
+              <h2 className="flex items-center gap-2.5 text-base font-semibold text-zinc-100 mb-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
+                    />
+                  </svg>
+                </span>
+                Nội dung bài học
+              </h2>
+              {hasContent ? (
+                <div className={lessonHtmlClass} dangerouslySetInnerHTML={{ __html: lesson.content }} />
+              ) : (
+                <p className="text-sm text-zinc-500">Chưa có nội dung văn bản cho bài này.</p>
+              )}
+            </section>
           </div>
         </main>
       </div>

@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import Modal from '../../components/admin/Modal';
 import { adminApi } from '../../api/adminApi';
 import { lessonService } from '../../api/lessonService';
+import api from '../../api/axios';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -40,6 +41,11 @@ const SaveIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
   </svg>
 );
+const UploadIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+  </svg>
+);
 
 const inputDark =
   'w-full px-4 py-2.5 rounded-lg bg-zinc-800/90 border border-zinc-600 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
@@ -51,7 +57,6 @@ function initialForm() {
     title: '',
     objectives: '',
     content: '',
-    cover_image: '',
     video_url: '',
     video_duration: 0,
     position: 0,
@@ -71,10 +76,26 @@ export default function LessonManagement() {
   const [formData, setFormData] = useState(initialForm());
   const [draggedId, setDraggedId] = useState(null);
   const [savingOrder, setSavingOrder] = useState(false);
+  const [loadingLessonDetail, setLoadingLessonDetail] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
 
   const dragOverRef = useRef(null);
+  const videoInputRef = useRef(null);
 
-  // Load courses for dropdown
+  function lessonToFormData(l) {
+    if (!l) return initialForm();
+    return {
+      title: l.title != null ? String(l.title) : '',
+      objectives: l.objectives != null ? String(l.objectives) : '',
+      content: l.content != null ? String(l.content) : '',
+      video_url: l.video_url != null ? String(l.video_url) : '',
+      video_duration: l.video_duration != null && l.video_duration !== '' ? Number(l.video_duration) : 0,
+      position: l.position != null && l.position !== '' ? Number(l.position) : 0,
+      is_free: Number(l.is_free) === 1 ? 1 : 0,
+      is_published: Number(l.is_published) === 1 ? 1 : 0,
+    };
+  }
+
   useEffect(() => {
     let cancelled = false;
     adminApi
@@ -93,22 +114,34 @@ export default function LessonManagement() {
     };
   }, []);
 
-  // Load lessons when course changes
   const fetchLessons = useCallback(async (courseId) => {
     if (!courseId) {
       setLessons([]);
       return;
     }
+    const cid = String(courseId).trim();
     setLoadingLessons(true);
     try {
-      const res = await lessonService.getLessonsByCourseAdmin(courseId);
-      if (res.success) {
+      const res = await lessonService.getLessonsByCourseAdmin(cid);
+      if (res?.success) {
         setLessons(res.data?.lessons ?? []);
-      } else {
-        setLessons([]);
+        return;
       }
-    } catch {
-      toast.error('Không tải được danh sách bài học');
+      throw new Error(res?.message || 'API không trả success');
+    } catch (err) {
+      const detail =
+        err?.response?.data?.message || err?.message || 'Không tải được danh sách bài học';
+      try {
+        const res2 = await lessonService.getLessonsByCourse(cid);
+        if (res2?.success) {
+          setLessons(res2.data?.lessons ?? []);
+          toast.error(`${detail} — hiển thị tạm các bài đã publish (thiếu nội dung khi sửa).`);
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+      toast.error(detail);
       setLessons([]);
     } finally {
       setLoadingLessons(false);
@@ -124,7 +157,6 @@ export default function LessonManagement() {
     setSelectedCourseId(e.target.value);
   };
 
-  // Drag & drop reorder
   const handleDragStart = (e, lessonId) => {
     setDraggedId(lessonId);
     e.dataTransfer.effectAllowed = 'move';
@@ -161,7 +193,6 @@ export default function LessonManagement() {
     dragOverRef.current = null;
   };
 
-  // Save new order to backend
   const handleSaveOrder = async () => {
     if (!selectedCourseId) return;
     setSavingOrder(true);
@@ -177,51 +208,89 @@ export default function LessonManagement() {
     }
   };
 
-  // Open add modal
   const handleAddLesson = () => {
     setEditingLesson(null);
+    setLoadingLessonDetail(false);
     setFormData(initialForm());
     setIsModalOpen(true);
   };
 
-  // Open edit modal
-  const handleEditLesson = (lesson) => {
+  const handleEditLesson = async (lesson) => {
     setEditingLesson(lesson);
-    setFormData({
-      title: lesson.title || '',
-      objectives: lesson.objectives || '',
-      content: lesson.content || '',
-      cover_image: lesson.cover_image || '',
-      video_url: lesson.video_url || '',
-      video_duration: lesson.video_duration ?? 0,
-      position: lesson.position ?? 0,
-      is_free: lesson.is_free ? 1 : 0,
-      is_published: lesson.is_published ? 1 : 0,
-    });
     setIsModalOpen(true);
+    setLoadingLessonDetail(true);
+    setFormData(lessonToFormData(lesson));
+    try {
+      const res = await lessonService.getLesson(lesson._id);
+      if (res?.success && res.data?.lesson) {
+        setFormData(lessonToFormData(res.data.lesson));
+      } else {
+        toast.error(res?.message || 'Không tải đủ chi tiết bài học');
+      }
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || 'Không tải đủ chi tiết bài học — đang dùng dữ liệu từ danh sách (có thể thiếu).'
+      );
+    } finally {
+      setLoadingLessonDetail(false);
+    }
   };
 
-  const handleCoverImageFile = (e) => {
+  const handleVideoFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Vui lòng chọn file ảnh');
+
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Chỉ chấp nhận file video: mp4, webm, ogg, mov, avi');
       e.target.value = '';
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Ảnh tối đa 2MB');
+
+    const maxSize = 500 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error('File video tối đa 500MB');
       e.target.value = '';
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFormData((prev) => ({ ...prev, cover_image: reader.result }));
-    };
-    reader.readAsDataURL(file);
+
+    setUploadingVideo(true);
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('video', file);
+
+      const { data } = await api.post('/upload/video', formDataUpload, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (data.success) {
+        setFormData((prev) => ({ ...prev, video_url: data.data.video_url }));
+        toast.success('Upload video thành công');
+      } else {
+        toast.error(data.message || 'Upload video thất bại');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Upload video thất bại');
+    } finally {
+      setUploadingVideo(false);
+      e.target.value = '';
+    }
   };
 
-  // Submit add / edit
+  const handleRemoveVideo = async () => {
+    const currentVideo = formData.video_url;
+    if (currentVideo) {
+      try {
+        await api.delete('/upload/video', { data: { filepath: currentVideo } });
+      } catch {
+        // Ignore delete errors
+      }
+    }
+    setFormData((prev) => ({ ...prev, video_url: '' }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedCourseId) {
@@ -232,22 +301,27 @@ export default function LessonManagement() {
       toast.error('Tiêu đề bài học không được để trống');
       return;
     }
+    if (editingLesson && loadingLessonDetail) {
+      return;
+    }
     try {
       const payload = {
         course_id: selectedCourseId,
         title: formData.title.trim(),
-        objectives: formData.objectives || '',
-        content: formData.content || '',
-        cover_image: formData.cover_image || '',
-        video_url: formData.video_url || '',
+        objectives: formData.objectives != null ? String(formData.objectives) : '',
+        content: formData.content != null ? String(formData.content) : '',
+        video_url: formData.video_url != null ? String(formData.video_url) : '',
         video_duration: Number(formData.video_duration) || 0,
         position: Number(formData.position) || 0,
         is_free: formData.is_free ? 1 : 0,
         is_published: formData.is_published ? 1 : 0,
       };
 
+      console.log('[FE handleSubmit] gửi payload:', JSON.stringify(payload, null, 2));
+
       if (editingLesson) {
         const res = await lessonService.updateLesson(editingLesson._id, payload);
+        console.log('[FE handleSubmit] PUT response:', JSON.stringify(res, null, 2));
         if (res.success) {
           toast.success('Cập nhật bài học thành công');
           setIsModalOpen(false);
@@ -257,6 +331,7 @@ export default function LessonManagement() {
         }
       } else {
         const res = await lessonService.createLesson(payload);
+        console.log('[FE handleSubmit] POST response:', JSON.stringify(res, null, 2));
         if (res.success) {
           toast.success('Tạo bài học thành công');
           setIsModalOpen(false);
@@ -266,11 +341,11 @@ export default function LessonManagement() {
         }
       }
     } catch (err) {
+      console.error('[FE handleSubmit] LỖI:', err);
       toast.error(err?.response?.data?.message || 'Có lỗi xảy ra');
     }
   };
 
-  // Delete lesson
   const handleDeleteLesson = async (lesson) => {
     if (!window.confirm(`Xóa bài học "${lesson.title}"?`)) return;
     try {
@@ -398,15 +473,11 @@ export default function LessonManagement() {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0 flex items-start gap-3">
-                      <div className="w-14 h-14 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
-                        {lesson.cover_image ? (
-                          <img
-                            src={lesson.cover_image}
-                            alt=""
-                            className="w-full h-full object-cover"
-                          />
+                      <div className="w-14 h-14 rounded-lg bg-zinc-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                        {lesson.video_url ? (
+                          <VideoIcon />
                         ) : (
-                          <span className="text-xl text-gray-400">🖼</span>
+                          <span className="text-xl text-gray-400">📹</span>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -475,15 +546,37 @@ export default function LessonManagement() {
         )}
       </div>
 
-      {/* Add / Edit modal — dark UI như tham chiếu */}
+      {/* Add / Edit modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setLoadingLessonDetail(false);
+        }}
         title={editingLesson ? 'Chỉnh sửa bài học' : 'Thêm bài học mới'}
         size="xl"
         variant="dark"
       >
-        <form onSubmit={handleSubmit} className="space-y-5">
+        {editingLesson && loadingLessonDetail ? (
+          <div className="py-16 flex flex-col items-center justify-center gap-4 text-zinc-400">
+            <div className="h-8 w-8 border-2 border-zinc-500 border-t-blue-500 rounded-full animate-spin" />
+            <p className="text-sm">Đang tải nội dung bài học…</p>
+            <button
+              type="button"
+              onClick={() => {
+                setIsModalOpen(false);
+                setLoadingLessonDetail(false);
+              }}
+              className="px-4 py-2 rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-800 text-sm"
+            >
+              Hủy
+            </button>
+          </div>
+        ) : null}
+        <form
+          onSubmit={handleSubmit}
+          className={`space-y-5 ${editingLesson && loadingLessonDetail ? 'hidden' : ''}`}
+        >
           <div>
             <label className={labelDark}>
               Tiêu đề bài học <span className="text-red-400">*</span>
@@ -493,57 +586,58 @@ export default function LessonManagement() {
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               className={inputDark}
-              placeholder="VD: Bài 1 : React"
+              placeholder="VD: Bài 1: React"
               required
             />
           </div>
 
           <div>
-            <label className={labelDark}>Ảnh bìa / minh họa bài học</label>
+            <label className={labelDark}>Video bài học</label>
             <input
               type="file"
-              accept="image/*"
-              onChange={handleCoverImageFile}
-              className="w-full text-sm text-zinc-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-zinc-700 file:text-zinc-200"
+              ref={videoInputRef}
+              accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo"
+              onChange={handleVideoFileSelect}
+              className="hidden"
             />
-            <p className={hintDark}>PNG/JPG tối đa 2MB — hoặc dán URL bên dưới</p>
-            <input
-              type="text"
-              value={formData.cover_image?.startsWith('data:') ? '' : formData.cover_image}
-              onChange={(e) => setFormData({ ...formData, cover_image: e.target.value })}
-              className={`${inputDark} mt-2`}
-              placeholder="https://..."
-            />
-            {formData.cover_image && (
-              <div className="mt-3 flex items-center gap-3">
-                <img
-                  src={formData.cover_image}
-                  alt=""
-                  className="h-24 w-40 object-cover rounded-lg border border-zinc-600"
-                />
+            <button
+              type="button"
+              onClick={() => videoInputRef.current?.click()}
+              disabled={uploadingVideo}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-zinc-600 text-zinc-400 hover:border-blue-500 hover:text-blue-400 transition-colors disabled:opacity-50"
+            >
+              {uploadingVideo ? (
+                <>
+                  <div className="h-5 w-5 border-2 border-zinc-500 border-t-blue-500 rounded-full animate-spin" />
+                  <span>Đang upload video...</span>
+                </>
+              ) : (
+                <>
+                  <UploadIcon />
+                  <span>Chọn file video (mp4, webm, mov, avi)</span>
+                </>
+              )}
+            </button>
+            <p className={hintDark}>File tối đa 500MB</p>
+
+            {formData.video_url && (
+              <div className="mt-3 flex items-center gap-3 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
+                <VideoIcon />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-zinc-200 truncate">
+                    {formData.video_url.split('/').pop()}
+                  </p>
+                  <p className="text-xs text-zinc-500">Video đã upload</p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, cover_image: '' })}
-                  className="text-sm text-red-400 hover:underline"
+                  onClick={handleRemoveVideo}
+                  className="text-sm text-red-400 hover:text-red-300 hover:underline"
                 >
-                  Xóa ảnh
+                  Xóa video
                 </button>
               </div>
             )}
-          </div>
-
-          <div>
-            <label className={labelDark}>Video URL</label>
-            <input
-              type="text"
-              value={formData.video_url}
-              onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
-              className={inputDark}
-              placeholder="https://www.youtube.com/watch?v=..."
-            />
-            <p className={hintDark}>
-              Hỗ trợ YouTube, Vimeo, hoặc link video trực tiếp (.mp4)
-            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -635,7 +729,8 @@ export default function LessonManagement() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+              disabled={!!editingLesson && loadingLessonDetail}
+              className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
               {editingLesson ? 'Lưu thay đổi' : 'Thêm bài học'}
             </button>
