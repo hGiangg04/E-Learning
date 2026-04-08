@@ -33,6 +33,7 @@ const courseRoutes = require('./routes/course.routes');
 const categoryRoutes = require('./routes/category.routes');
 const enrollmentRoutes = require('./routes/enrollment.routes');
 const lessonRoutes = require('./routes/lesson.routes');
+const paymentRoutes = require('./routes/payment.routes');
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -41,6 +42,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/enrollments', enrollmentRoutes);
 app.use('/api/lessons', lessonRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // 404 handler
 app.use((req, res) => {

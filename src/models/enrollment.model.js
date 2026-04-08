@@ -21,8 +21,8 @@ const enrollmentSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['active', 'pending', 'expired', 'cancelled'],
-        default: 'active'
+        enum: ['pending', 'active', 'expired', 'cancelled'],
+        default: 'pending'
     },
     progress_percent: {
         type: Number,

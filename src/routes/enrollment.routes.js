@@ -1,14 +1,16 @@
 const express = require('express');
 const enrollmentController = require('../controllers/enrollment.controller');
-const { authMiddleware } = require('../middleware/auth.middleware');
+const { authMiddleware, adminOnly } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
-// Tất cả routes đều cần đăng nhập
 router.use(authMiddleware);
+
+router.get('/admin/pending', adminOnly, enrollmentController.listPending);
+router.patch('/admin/:id/approve', adminOnly, enrollmentController.approveByAdmin);
 
 router.get('/', enrollmentController.getMyEnrollments);
 router.post('/', enrollmentController.enrollCourse);
-router.delete('/:courseId', enrollmentController.cancelEnrollment);
+router.delete('/course/:courseId', enrollmentController.cancelEnrollment);
 
 module.exports = router;
