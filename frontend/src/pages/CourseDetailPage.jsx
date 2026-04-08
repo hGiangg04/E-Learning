@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import PageLayout from '../components/PageLayout';
-import { courseService, enrollmentService } from '../api';
+import { courseService, enrollmentService, lessonService } from '../api';
 
 export default function CourseDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [course, setCourse] = useState(null);
+  const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lessonsLoading, setLessonsLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
+  const [access, setAccess] = useState(null);
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   useEffect(() => {
@@ -28,6 +31,50 @@ export default function CourseDetailPage() {
     };
     if (id) load();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    const loadLessons = async () => {
+      setLessonsLoading(true);
+      try {
+        const res = await lessonService.getLessonsByCourse(id);
+        if (!cancelled && res?.success && res.data?.lessons) {
+          setLessons(res.data.lessons);
+        } else if (!cancelled) {
+          setLessons([]);
+        }
+      } catch {
+        if (!cancelled) setLessons([]);
+      } finally {
+        if (!cancelled) setLessonsLoading(false);
+      }
+    };
+    loadLessons();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !token) {
+      setAccess(null);
+      return;
+    }
+    let cancelled = false;
+    enrollmentService
+      .checkAccess(id)
+      .then((res) => {
+        if (cancelled || !res.data?.success) return;
+        setAccess(res.data.data);
+      })
+      .catch(() => {
+        if (!cancelled) setAccess(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, token]);
 
   const formatPrice = (price) => {
     if (price === 0 || price == null) return 'Miễn phí';
@@ -48,9 +95,25 @@ export default function CourseDetailPage() {
     try {
       const res = await enrollmentService.enroll(id);
       toast.success(res.data?.message || 'Ghi danh thành công');
-      navigate('/my-courses');
+      try {
+        const check = await enrollmentService.checkAccess(id);
+        if (check.data?.success) setAccess(check.data.data);
+      } catch {
+        setAccess({ enrolled: true, status: 'pending', canLearn: false });
+      }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Ghi danh thất bại');
+      const msg = err.response?.data?.message;
+      if (msg?.includes('đã đăng ký') || err.response?.status === 400) {
+        toast.success('Bạn đã ghi danh khóa học này');
+        try {
+          const check = await enrollmentService.checkAccess(id);
+          if (check.data?.success) setAccess(check.data.data);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        toast.error(msg || 'Ghi danh thất bại');
+      }
     } finally {
       setEnrolling(false);
     }
@@ -59,6 +122,12 @@ export default function CourseDetailPage() {
   const category = course?.category_id || course?.category;
   const instructor = course?.instructor_id || course?.instructor;
   const payPrice = course?.discount_price > 0 ? course.discount_price : course?.price;
+
+  const canLearn = access?.canLearn === true;
+  const enrolled = access?.enrolled === true;
+  const pendingApproval = enrolled && access?.status === 'pending';
+
+  const firstLessonId = lessons[0]?._id;
 
   if (loading) {
     return (
@@ -131,17 +200,84 @@ export default function CourseDetailPage() {
                     <p className="text-sm text-gray-400 line-through">{formatPrice(course.price)}</p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleEnroll}
-                  disabled={enrolling}
-                  className="btn-primary sm:ml-auto disabled:opacity-60"
-                >
-                  {enrolling ? 'Đang xử lý…' : 'Ghi danh khóa học'}
-                </button>
+                <div className="sm:ml-auto flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                  {canLearn && firstLessonId ? (
+                    <Link
+                      to={`/courses/${id}/lesson/${firstLessonId}`}
+                      className="btn-primary text-center"
+                    >
+                      Vào học ngay
+                    </Link>
+                  ) : canLearn && !firstLessonId ? (
+                    <span className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-center">
+                      Khóa học chưa có bài học
+                    </span>
+                  ) : pendingApproval ? (
+                    <span className="px-4 py-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-center">
+                      Đang chờ duyệt / thanh toán
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleEnroll}
+                      disabled={enrolling}
+                      className="btn-primary disabled:opacity-60"
+                    >
+                      {enrolling ? 'Đang xử lý…' : 'Ghi danh khóa học'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Danh sách bài học */}
+          <section id="curriculum" className="mt-10 rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900">Nội dung khóa học</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {lessonsLoading
+                  ? 'Đang tải…'
+                  : `${lessons.length} bài học${canLearn ? ' — Bạn có thể mở từng bài bên dưới' : ''}`}
+              </p>
+            </div>
+            <ul className="divide-y divide-gray-100">
+              {lessonsLoading ? (
+                <li className="px-6 py-8 text-center text-gray-400">Đang tải danh sách bài…</li>
+              ) : lessons.length === 0 ? (
+                <li className="px-6 py-8 text-center text-gray-500">
+                  Chưa có bài học nào. Admin có thể thêm trong mục <strong>Bài học</strong> (admin).
+                </li>
+              ) : (
+                lessons.map((lesson, index) => {
+                  const open = canLearn || Number(lesson.is_free) === 1;
+                  return (
+                    <li key={lesson._id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50">
+                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-700 text-sm font-semibold flex items-center justify-center">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900">{lesson.title}</p>
+                        {lesson.video_url && (
+                          <p className="text-xs text-gray-500 truncate">Có video</p>
+                        )}
+                      </div>
+                      {open ? (
+                        <Link
+                          to={`/courses/${id}/lesson/${lesson._id}`}
+                          className="text-sm font-medium text-primary-600 hover:underline shrink-0"
+                        >
+                          Học
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-gray-400 shrink-0">Đăng nhập &amp; ghi danh</span>
+                      )}
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </section>
         </div>
       </article>
     </PageLayout>

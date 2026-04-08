@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import CoursesPage from './pages/CoursesPage';
 import CourseDetailPage from './pages/CourseDetailPage';
+import LessonLearnPage from './pages/LessonLearnPage';
 import AboutPage from './pages/AboutPage';
 import CategoriesPage from './pages/CategoriesPage';
 import ProfilePage from './pages/ProfilePage';
@@ -16,6 +17,7 @@ import './index.css';
 import DashboardPage from './pages/admin/DashboardPage';
 import UserManagement from './pages/admin/UserManagement';
 import CourseManagement from './pages/admin/CourseManagement';
+import LessonManagement from './pages/admin/LessonManagement';
 import CategoryManagement from './pages/admin/CategoryManagement';
 import EnrollmentManagement from './pages/admin/EnrollmentManagement';
 import PaymentManagement from './pages/admin/PaymentManagement';
@@ -32,6 +34,7 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/courses" element={<CoursesPage />} />
+        <Route path="/courses/:courseId/lesson/:lessonId" element={<LessonLearnPage />} />
         <Route path="/courses/:id" element={<CourseDetailPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/categories" element={<CategoriesPage />} />
@@ -42,6 +45,7 @@ function App() {
         <Route path="/admin" element={<DashboardPage />} />
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/courses" element={<CourseManagement />} />
+        <Route path="/admin/lessons" element={<LessonManagement />} />
         <Route path="/admin/categories" element={<CategoryManagement />} />
         <Route path="/admin/enrollments" element={<EnrollmentManagement />} />
         <Route path="/admin/payments" element={<PaymentManagement />} />

@@ -4,9 +4,16 @@ const { authMiddleware, contentAdminOnly } = require('../middleware/auth.middlew
 
 const router = express.Router();
 
-// Routes công khai
+// GET /api/lessons/admin/course/:courseId — admin: đủ trường cho form sửa
+router.get('/admin/course/:courseId', authMiddleware, contentAdminOnly, lessonController.listLessonsForAdmin);
+
+// GET /api/lessons/course/:courseId?admin=1 — admin: đủ trường (có content/objectives) cho form sửa
+//                                ?admin=  → không điều kiện — trả đủ trường
+//                                không có  → chỉ trả list ngắn (không content/objectives)
 router.get('/course/:courseId', lessonController.getLessonsByCourse);
-router.get('/:id', lessonController.getLessonById);
+
+// Chi tiết bài học — cần JWT (kiểm tra ghi danh trong controller)
+router.get('/:id', authMiddleware, lessonController.getLessonById);
 
 // Routes cần đăng nhập
 router.post('/', authMiddleware, contentAdminOnly, lessonController.createLesson);

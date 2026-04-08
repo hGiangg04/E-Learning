@@ -5,17 +5,20 @@ import Categories from '../components/Categories';
 import FeaturedCourses from '../components/FeaturedCourses';
 import Stats from '../components/Stats';
 import Footer from '../components/Footer';
+import { usePublicStats } from '../hooks/usePublicStats';
 
 export default function HomePage() {
+  const publicStats = usePublicStats();
+
   return (
     <div className="min-h-screen flex flex-col w-full">
       <Navbar />
       <main className="flex-1 w-full">
         <BannerCarousel />
-        <Hero />
+        <Hero stats={publicStats} />
         <Categories />
         <FeaturedCourses />
-        <Stats />
+        <Stats stats={publicStats} />
       </main>
       <Footer />
     </div>
