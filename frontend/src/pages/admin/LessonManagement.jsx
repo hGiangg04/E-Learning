@@ -259,11 +259,7 @@ export default function LessonManagement() {
       const formDataUpload = new FormData();
       formDataUpload.append('video', file);
 
-      const { data } = await api.post('/upload/video', formDataUpload, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const { data } = await api.post('upload/video', formDataUpload);
 
       if (data.success) {
         setFormData((prev) => ({ ...prev, video_url: data.data.video_url }));
@@ -283,7 +279,7 @@ export default function LessonManagement() {
     const currentVideo = formData.video_url;
     if (currentVideo) {
       try {
-        await api.delete('/upload/video', { data: { filepath: currentVideo } });
+        await api.delete('upload/video', { data: { filepath: currentVideo } });
       } catch {
         // Ignore delete errors
       }

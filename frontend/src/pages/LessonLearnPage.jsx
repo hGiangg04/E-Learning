@@ -112,7 +112,13 @@ export default function LessonLearnPage() {
     if (!lesson?.video_url) return null;
     const url = String(lesson.video_url);
     if (url.startsWith('/uploads/videos/')) {
-      return import.meta.env.VITE_API_URL + url;
+      // Cùng origin + proxy Vite (`/uploads` → backend); prod: gốc API bỏ hậu tố /api
+      const base = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, '') || '';
+      if (base && !import.meta.env.DEV) {
+        const origin = base.replace(/\/api$/i, '');
+        return origin ? `${origin}${url}` : url;
+      }
+      return url;
     }
     return url;
   }, [lesson?.video_url]);
