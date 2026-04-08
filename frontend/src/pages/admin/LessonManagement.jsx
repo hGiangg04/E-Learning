@@ -41,10 +41,17 @@ const SaveIcon = () => (
   </svg>
 );
 
+const inputDark =
+  'w-full px-4 py-2.5 rounded-lg bg-zinc-800/90 border border-zinc-600 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+const labelDark = 'block text-sm font-medium text-zinc-300 mb-1.5';
+const hintDark = 'text-xs text-zinc-500 mt-1';
+
 function initialForm() {
   return {
     title: '',
+    objectives: '',
     content: '',
+    cover_image: '',
     video_url: '',
     video_duration: 0,
     position: 0,
@@ -94,7 +101,7 @@ export default function LessonManagement() {
     }
     setLoadingLessons(true);
     try {
-      const res = await lessonService.getLessonsByCourse(courseId);
+      const res = await lessonService.getLessonsByCourseAdmin(courseId);
       if (res.success) {
         setLessons(res.data?.lessons ?? []);
       } else {
@@ -182,7 +189,9 @@ export default function LessonManagement() {
     setEditingLesson(lesson);
     setFormData({
       title: lesson.title || '',
+      objectives: lesson.objectives || '',
       content: lesson.content || '',
+      cover_image: lesson.cover_image || '',
       video_url: lesson.video_url || '',
       video_duration: lesson.video_duration ?? 0,
       position: lesson.position ?? 0,
@@ -190,6 +199,26 @@ export default function LessonManagement() {
       is_published: lesson.is_published ? 1 : 0,
     });
     setIsModalOpen(true);
+  };
+
+  const handleCoverImageFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn file ảnh');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Ảnh tối đa 2MB');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => ({ ...prev, cover_image: reader.result }));
+    };
+    reader.readAsDataURL(file);
   };
 
   // Submit add / edit
@@ -207,7 +236,9 @@ export default function LessonManagement() {
       const payload = {
         course_id: selectedCourseId,
         title: formData.title.trim(),
+        objectives: formData.objectives || '',
         content: formData.content || '',
+        cover_image: formData.cover_image || '',
         video_url: formData.video_url || '',
         video_duration: Number(formData.video_duration) || 0,
         position: Number(formData.position) || 0,
@@ -366,7 +397,19 @@ export default function LessonManagement() {
                     </div>
 
                     {/* Info */}
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 flex items-start gap-3">
+                      <div className="w-14 h-14 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                        {lesson.cover_image ? (
+                          <img
+                            src={lesson.cover_image}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xl text-gray-400">🖼</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-gray-900 truncate">{lesson.title}</span>
                         {lesson.is_free === 1 && (
@@ -393,6 +436,10 @@ export default function LessonManagement() {
                             Có nội dung
                           </span>
                         )}
+                        {lesson.objectives && lesson.objectives.length > 0 && (
+                          <span className="text-xs text-gray-500">Có mục tiêu</span>
+                        )}
+                      </div>
                       </div>
                     </div>
 
@@ -428,133 +475,167 @@ export default function LessonManagement() {
         )}
       </div>
 
-      {/* Add / Edit modal */}
+      {/* Add / Edit modal — dark UI như tham chiếu */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingLesson ? 'Chỉnh sửa bài học' : 'Thêm bài học mới'}
-        size="lg"
+        size="xl"
+        variant="dark"
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Title */}
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tiêu đề bài học <span className="text-red-500">*</span>
+            <label className={labelDark}>
+              Tiêu đề bài học <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="VD: Bài 1 — Giới thiệu React"
+              className={inputDark}
+              placeholder="VD: Bài 1 : React"
               required
             />
           </div>
 
-          {/* Video URL */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Video URL
-            </label>
+            <label className={labelDark}>Ảnh bìa / minh họa bài học</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleCoverImageFile}
+              className="w-full text-sm text-zinc-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-zinc-700 file:text-zinc-200"
+            />
+            <p className={hintDark}>PNG/JPG tối đa 2MB — hoặc dán URL bên dưới</p>
+            <input
+              type="text"
+              value={formData.cover_image?.startsWith('data:') ? '' : formData.cover_image}
+              onChange={(e) => setFormData({ ...formData, cover_image: e.target.value })}
+              className={`${inputDark} mt-2`}
+              placeholder="https://..."
+            />
+            {formData.cover_image && (
+              <div className="mt-3 flex items-center gap-3">
+                <img
+                  src={formData.cover_image}
+                  alt=""
+                  className="h-24 w-40 object-cover rounded-lg border border-zinc-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, cover_image: '' })}
+                  className="text-sm text-red-400 hover:underline"
+                >
+                  Xóa ảnh
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className={labelDark}>Video URL</label>
             <input
               type="text"
               value={formData.video_url}
               onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="https://www.youtube.com/watch?v=... hoặc link video"
+              className={inputDark}
+              placeholder="https://www.youtube.com/watch?v=..."
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className={hintDark}>
               Hỗ trợ YouTube, Vimeo, hoặc link video trực tiếp (.mp4)
             </p>
           </div>
 
-          {/* Video duration */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Thời lượng video (giây)
-              </label>
+              <label className={labelDark}>Thời lượng video (giây)</label>
               <input
                 type="number"
                 value={formData.video_duration}
                 onChange={(e) =>
                   setFormData({ ...formData, video_duration: e.target.value })
                 }
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="300 = 5 phút"
+                className={inputDark}
+                placeholder="0"
                 min={0}
               />
             </div>
-            {/* Position */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Thứ tự (vị trí)
-              </label>
+              <label className={labelDark}>Thứ tự (vị trí)</label>
               <input
                 type="number"
                 value={formData.position}
                 onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className={inputDark}
                 min={0}
               />
             </div>
           </div>
 
-          {/* Content (rich text) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nội dung bài học
-            </label>
+            <label className={labelDark}>Mục tiêu bài học</label>
+            <textarea
+              value={formData.objectives}
+              onChange={(e) => setFormData({ ...formData, objectives: e.target.value })}
+              rows={4}
+              className={`${inputDark} font-mono text-sm resize-y min-h-[100px]`}
+              placeholder="Danh sách hoặc HTML: &lt;ul&gt;&lt;li&gt;…&lt;/li&gt;&lt;/ul&gt;"
+            />
+            <p className={hintDark}>
+              Hiển thị riêng phần &quot;Mục tiêu bài học&quot; cho học viên — hỗ trợ HTML cơ bản.
+            </p>
+          </div>
+
+          <div>
+            <label className={labelDark}>Nội dung bài học</label>
             <textarea
               value={formData.content}
               onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-              rows={6}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+              rows={7}
+              className={`${inputDark} font-mono text-sm resize-y min-h-[140px]`}
               placeholder="Nhập nội dung bài học (hỗ trợ HTML)"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className={hintDark}>
               Có thể dùng HTML cơ bản: &lt;b&gt;, &lt;i&gt;, &lt;br&gt;, &lt;p&gt;, danh sách…
             </p>
           </div>
 
-          {/* Toggles */}
           <div className="flex flex-wrap gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-center gap-2.5 cursor-pointer text-sm text-zinc-300">
               <input
                 type="checkbox"
                 checked={formData.is_free === 1}
                 onChange={(e) =>
                   setFormData({ ...formData, is_free: e.target.checked ? 1 : 0 })
                 }
-                className="w-4 h-4 text-primary-600 rounded"
+                className="w-4 h-4 rounded border-zinc-500 bg-zinc-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 focus:ring-offset-zinc-900"
               />
-              <span className="text-sm text-gray-700">Bài học miễn phí (xem trước)</span>
+              Bài học miễn phí (xem trước)
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-center gap-2.5 cursor-pointer text-sm text-zinc-300">
               <input
                 type="checkbox"
                 checked={formData.is_published === 1}
                 onChange={(e) =>
                   setFormData({ ...formData, is_published: e.target.checked ? 1 : 0 })
                 }
-                className="w-4 h-4 text-primary-600 rounded"
+                className="w-4 h-4 rounded border-zinc-500 bg-zinc-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 focus:ring-offset-zinc-900"
               />
-              <span className="text-sm text-gray-700">Hiển thị với học viên</span>
+              Hiển thị với học viên
             </label>
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-5 border-t border-zinc-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-5 py-2.5 rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-800 transition-colors"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
             >
               {editingLesson ? 'Lưu thay đổi' : 'Thêm bài học'}
             </button>

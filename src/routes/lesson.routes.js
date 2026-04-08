@@ -4,6 +4,14 @@ const { authMiddleware, contentAdminOnly } = require('../middleware/auth.middlew
 
 const router = express.Router();
 
+// Admin — danh sách đầy đủ (có content, objectives, cover_image) để form sửa
+router.get(
+    '/admin/course/:courseId',
+    authMiddleware,
+    contentAdminOnly,
+    lessonController.listLessonsForAdmin
+);
+
 // Routes công khai — danh sách bài (không có content)
 router.get('/course/:courseId', lessonController.getLessonsByCourse);
 

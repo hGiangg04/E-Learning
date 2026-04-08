@@ -6,6 +6,12 @@ export const lessonService = {
     return data;
   },
 
+  /** Admin: đầy đủ content, objectives, cover_image */
+  async getLessonsByCourseAdmin(courseId) {
+    const { data } = await api.get(`/lessons/admin/course/${courseId}`);
+    return data;
+  },
+
   async getLesson(id) {
     const { data } = await api.get(`/lessons/${id}`);
     return data;
