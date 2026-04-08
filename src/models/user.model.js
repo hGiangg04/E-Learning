@@ -18,8 +18,7 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: [true, 'Mật khẩu không được để trống'],
-        minlength: [6, 'Mật khẩu phải ít nhất 6 ký tự']
+        default: null   // null = đăng nhập bằng Google (không có mật khẩu)
     },
     role: {
         type: String,
@@ -46,6 +45,23 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 1
     },
+
+    // ---- Google OAuth ----
+    google_id: {
+        type: String,
+        default: null
+    },
+
+    // ---- Quên mật khẩu ----
+    reset_token: {
+        type: String,
+        default: null
+    },
+    reset_token_expires: {
+        type: Date,
+        default: null
+    },
+
     created_at: {
         type: Date,
         default: Date.now
@@ -56,19 +72,20 @@ const userSchema = new mongoose.Schema({
     }
 });
 
-// Hash password trước khi lưu
+// Hash password khi password bị thay đổi
 userSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) return next();
+    if (!this.isModified('password') || !this.password) return next();
     this.password = await bcrypt.hash(this.password, 12);
     next();
 });
 
 // So sánh password
 userSchema.methods.comparePassword = async function(candidatePassword) {
+    if (!this.password) return false;
     return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Virtual cho thông tin public
+// Virtual: public profile
 userSchema.virtual('profile').get(function() {
     return {
         id: this._id,
