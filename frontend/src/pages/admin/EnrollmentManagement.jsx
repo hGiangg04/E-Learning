@@ -1,63 +1,60 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
+import { adminApi } from '../../api/adminApi';
 
 export default function EnrollmentManagement() {
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
-
-  useEffect(() => {
-    fetchEnrollments();
-  }, []);
+  const [viewMode, setViewMode] = useState('all'); // 'all' | 'pending'
 
   const fetchEnrollments = async () => {
     try {
       setLoading(true);
-      // Mock data
-      setEnrollments([
-        { _id: '1', user: { name: 'Nguyễn Văn A', email: 'vana@gmail.com' }, course: { title: 'React cơ bản' }, enrolledAt: '2024-01-15', status: 'active', progress: 75 },
-        { _id: '2', user: { name: 'Trần Thị B', email: 'thib@gmail.com' }, course: { title: 'Node.js Advanced' }, enrolledAt: '2024-01-14', status: 'active', progress: 45 },
-        { _id: '3', user: { name: 'Lê Văn C', email: 'vanc@gmail.com' }, course: { title: 'Python for Data Science' }, enrolledAt: '2024-01-13', status: 'pending', progress: 0 },
-        { _id: '4', user: { name: 'Phạm Thị D', email: 'thid@gmail.com' }, course: { title: 'Docker & Kubernetes' }, enrolledAt: '2024-01-12', status: 'active', progress: 90 },
-        { _id: '5', user: { name: 'Hoàng Văn E', email: 'vane@gmail.com' }, course: { title: 'TypeScript Masterclass' }, enrolledAt: '2024-01-11', status: 'cancelled', progress: 0 },
-        { _id: '6', user: { name: 'Đặng Thị F', email: 'thif@gmail.com' }, course: { title: 'MongoDB Fundamentals' }, enrolledAt: '2024-01-10', status: 'active', progress: 30 },
-        { _id: '7', user: { name: 'Bùi Văn G', email: 'vang@gmail.com' }, course: { title: 'React cơ bản' }, enrolledAt: '2024-01-09', status: 'pending', progress: 0 },
-        { _id: '8', user: { name: 'Ngô Thị H', email: 'thih@gmail.com' }, course: { title: 'Python for Data Science' }, enrolledAt: '2024-01-08', status: 'active', progress: 60 },
-      ]);
+      let response;
+      if (viewMode === 'pending') {
+        response = await adminApi.getPendingEnrollments();
+      } else {
+        response = await adminApi.getEnrollments();
+      }
+      
+      if (response.data.success) {
+        const data = viewMode === 'pending' 
+          ? response.data.data.enrollments 
+          : response.data.data.enrollments || [];
+        setEnrollments(data);
+      }
     } catch (error) {
       console.error('Error fetching enrollments:', error);
+      toast.error('Không thể tải danh sách đăng ký');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchEnrollments();
+  }, [viewMode]);
+
   const columns = [
     {
-      key: 'user',
+      key: 'user_id',
       label: 'Học viên',
       render: (value) => (
         <div>
-          <span className="font-medium text-gray-900">{value.name}</span>
-          <p className="text-xs text-gray-500">{value.email}</p>
+          <span className="font-medium text-gray-900">{value?.name || '-'}</span>
+          <p className="text-xs text-gray-500">{value?.email || ''}</p>
         </div>
       ),
     },
-    { key: 'course', label: 'Khóa học', render: (value) => <span className="font-medium">{value.title}</span> },
-    { key: 'enrolledAt', label: 'Ngày đăng ký' },
     {
-      key: 'progress',
-      label: 'Tiến độ',
-      render: (value) => (
-        <div className="flex items-center gap-2">
-          <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full bg-primary-600 rounded-full" style={{ width: `${value}%` }}></div>
-          </div>
-          <span className="text-sm text-gray-600">{value}%</span>
-        </div>
-      ),
+      key: 'course_id',
+      label: 'Khóa học',
+      render: (value) => <span className="font-medium">{value?.title || '-'}</span>,
     },
     {
       key: 'status',
@@ -72,21 +69,43 @@ export default function EnrollmentManagement() {
           completed: 'bg-blue-100 text-blue-800',
         };
         return (
-          <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[value]}`}>
-            {statusLabels[value]}
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[value] || 'bg-gray-100 text-gray-800'}`}>
+            {statusLabels[value] || value}
           </span>
         );
       },
     },
+    {
+      key: 'enrolled_at',
+      label: 'Ngày đăng ký',
+      render: (value) => value ? new Date(value).toLocaleDateString('vi-VN') : '-',
+    },
   ];
 
-  const handleApprove = (enrollment) => {
-    setEnrollments(enrollments.map((e) => (e._id === enrollment._id ? { ...e, status: 'active' } : e)));
+  const handleApprove = async (enrollment) => {
+    try {
+      const response = await adminApi.approveEnrollment(enrollment._id);
+      if (response.data.success) {
+        toast.success('Đã duyệt đăng ký');
+        fetchEnrollments();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể duyệt đăng ký');
+    }
   };
 
-  const handleCancel = (enrollment) => {
+  const handleCancel = async (enrollment) => {
     if (window.confirm('Bạn có chắc muốn hủy đăng ký này?')) {
-      setEnrollments(enrollments.map((e) => (e._id === enrollment._id ? { ...e, status: 'cancelled' } : e)));
+      try {
+        // Use enrollment._id or course_id depending on API
+        const response = await adminApi.cancelEnrollment(enrollment.course_id?._id || enrollment.course_id);
+        if (response.data.success) {
+          toast.success('Đã hủy đăng ký');
+          fetchEnrollments();
+        }
+      } catch (error) {
+        toast.error(error.response?.data?.message || 'Không thể hủy đăng ký');
+      }
     }
   };
 
@@ -98,18 +117,47 @@ export default function EnrollmentManagement() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Quản lý đăng ký</h1>
-          <p className="text-gray-500">Quản lý đăng ký khóa học của học viên</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Quản lý đăng ký</h1>
+            <p className="text-gray-500">Quản lý đăng ký khóa học của học viên</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('all')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                viewMode === 'all' 
+                  ? 'bg-primary-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Tất cả
+            </button>
+            <button
+              onClick={() => setViewMode('pending')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                viewMode === 'pending' 
+                  ? 'bg-primary-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Chờ duyệt
+            </button>
+          </div>
         </div>
 
         <DataTable
-          title="Danh sách đăng ký"
+          title={viewMode === 'pending' ? 'Danh sách đăng ký chờ duyệt' : 'Danh sách đăng ký'}
           columns={columns}
           data={enrollments}
           onView={handleView}
           onDelete={handleCancel}
           loading={loading}
+          customActions={
+            viewMode === 'pending' 
+              ? [{ label: 'Duyệt', onClick: handleApprove, color: 'green' }]
+              : []
+          }
         />
 
         <Modal
@@ -125,35 +173,38 @@ export default function EnrollmentManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-500">Học viên</label>
-                  <p className="font-medium">{selectedEnrollment.user.name}</p>
-                  <p className="text-sm text-gray-600">{selectedEnrollment.user.email}</p>
+                  <p className="font-medium">{selectedEnrollment.user_id?.name || '-'}</p>
+                  <p className="text-sm text-gray-600">{selectedEnrollment.user_id?.email || ''}</p>
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Khóa học</label>
-                  <p className="font-medium">{selectedEnrollment.course.title}</p>
+                  <p className="font-medium">{selectedEnrollment.course_id?.title || '-'}</p>
+                  <p className="text-sm text-gray-600">
+                    {selectedEnrollment.course_id?.price 
+                      ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedEnrollment.course_id.price)
+                      : 'Miễn phí'}
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-500">Ngày đăng ký</label>
-                  <p className="font-medium">{selectedEnrollment.enrolledAt}</p>
+                  <p className="font-medium">
+                    {selectedEnrollment.enrolled_at 
+                      ? new Date(selectedEnrollment.enrolled_at).toLocaleDateString('vi-VN')
+                      : '-'}
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Trạng thái</label>
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    selectedEnrollment.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    selectedEnrollment.status === 'active' ? 'bg-green-100 text-green-800' :
+                    selectedEnrollment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
                   }`}>
-                    {selectedEnrollment.status === 'active' ? 'Đang học' : 'Chờ duyệt'}
+                    {selectedEnrollment.status === 'active' ? 'Đang học' :
+                     selectedEnrollment.status === 'pending' ? 'Chờ duyệt' : 'Đã hủy'}
                   </span>
-                </div>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Tiến độ học tập</label>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary-600 rounded-full" style={{ width: `${selectedEnrollment.progress}%` }}></div>
-                  </div>
-                  <span className="font-medium">{selectedEnrollment.progress}%</span>
                 </div>
               </div>
               {selectedEnrollment.status === 'pending' && (

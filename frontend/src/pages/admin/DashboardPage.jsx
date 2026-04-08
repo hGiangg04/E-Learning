@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/admin/AdminLayout';
 import StatCard from '../../components/admin/StatCard';
 import { adminApi } from '../../api/adminApi';
@@ -33,14 +34,11 @@ export default function DashboardPage() {
     totalCourses: 0,
     totalEnrollments: 0,
     totalRevenue: 0,
-    userTrend: 'up',
-    courseTrend: 'up',
-    enrollmentTrend: 'up',
-    revenueTrend: 'up',
   });
   const [loading, setLoading] = useState(true);
   const [recentEnrollments, setRecentEnrollments] = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
+  const [pendingEnrollments, setPendingEnrollments] = useState([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -49,34 +47,27 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      // Mock data for now - will connect to real API later
-      setStats({
-        totalUsers: 156,
-        totalCourses: 42,
-        totalEnrollments: 892,
-        totalRevenue: 125000000,
-        userTrend: 'up',
-        courseTrend: 'up',
-        enrollmentTrend: 'up',
-        revenueTrend: 'up',
-      });
 
-      // Mock recent data
-      setRecentUsers([
-        { _id: '1', name: 'Nguyễn Văn A', email: 'vana@gmail.com', role: 'user', createdAt: '2024-01-15' },
-        { _id: '2', name: 'Trần Thị B', email: 'thib@gmail.com', role: 'user', createdAt: '2024-01-14' },
-        { _id: '3', name: 'Lê Văn C', email: 'vanc@gmail.com', role: 'instructor', createdAt: '2024-01-13' },
-        { _id: '4', name: 'Phạm Thị D', email: 'thid@gmail.com', role: 'user', createdAt: '2024-01-12' },
-        { _id: '5', name: 'Hoàng Văn E', email: 'vane@gmail.com', role: 'user', createdAt: '2024-01-11' },
-      ]);
+      // Fetch users
+      const usersRes = await adminApi.getUsers({ limit: 5 });
+      if (usersRes.data.success) {
+        setRecentUsers(usersRes.data.data.users || []);
+        setStats(prev => ({ ...prev, totalUsers: usersRes.data.data.pagination?.total || 0 }));
+      }
 
-      setRecentEnrollments([
-        { _id: '1', user: { name: 'Nguyễn Văn A' }, course: { title: 'React cơ bản' }, enrolledAt: '2024-01-15', status: 'active' },
-        { _id: '2', user: { name: 'Trần Thị B' }, course: { title: 'Node.js Advanced' }, enrolledAt: '2024-01-14', status: 'active' },
-        { _id: '3', user: { name: 'Lê Văn C' }, course: { title: 'Python for Data Science' }, enrolledAt: '2024-01-13', status: 'pending' },
-        { _id: '4', user: { name: 'Phạm Thị D' }, course: { title: 'Docker & Kubernetes' }, enrolledAt: '2024-01-12', status: 'active' },
-        { _id: '5', user: { name: 'Hoàng Văn E' }, course: { title: 'TypeScript Masterclass' }, enrolledAt: '2024-01-11', status: 'active' },
-      ]);
+      // Fetch courses
+      const coursesRes = await adminApi.getCourses({ limit: 1 });
+      if (coursesRes.data.success) {
+        setStats(prev => ({ ...prev, totalCourses: coursesRes.data.data.pagination?.total || 0 }));
+      }
+
+      // Fetch pending enrollments
+      const pendingRes = await adminApi.getPendingEnrollments();
+      if (pendingRes.data.success) {
+        setPendingEnrollments(pendingRes.data.data.enrollments || []);
+        setRecentEnrollments(pendingRes.data.data.enrollments?.slice(0, 5) || []);
+      }
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -84,17 +75,20 @@ export default function DashboardPage() {
     }
   };
 
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
   const formatDate = (date) => {
+    if (!date) return '-';
     return new Date(date).toLocaleDateString('vi-VN');
   };
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -111,32 +105,24 @@ export default function DashboardPage() {
             title="Tổng người dùng"
             value={stats.totalUsers}
             icon={<UsersIcon />}
-            trend={stats.userTrend}
-            trendValue="+12%"
             color="blue"
           />
           <StatCard
             title="Tổng khóa học"
             value={stats.totalCourses}
             icon={<CourseIcon />}
-            trend={stats.courseTrend}
-            trendValue="+8%"
             color="green"
           />
           <StatCard
-            title="Tổng đăng ký"
-            value={stats.totalEnrollments}
+            title="Chờ duyệt"
+            value={pendingEnrollments.length}
             icon={<EnrollmentIcon />}
-            trend={stats.enrollmentTrend}
-            trendValue="+24%"
             color="purple"
           />
           <StatCard
-            title="Tổng doanh thu"
-            value={formatCurrency(stats.totalRevenue)}
+            title="Đăng ký"
+            value={stats.totalEnrollments}
             icon={<RevenueIcon />}
-            trend={stats.revenueTrend}
-            trendValue="+18%"
             color="orange"
           />
         </div>
@@ -147,61 +133,73 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Người dùng mới</h3>
-              <a href="/admin/users" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+              <Link to="/admin/users" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
                 Xem tất cả
-              </a>
+              </Link>
             </div>
-            <div className="divide-y divide-gray-100">
-              {recentUsers.map((user) => (
-                <div key={user._id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-medium">
-                      {user.name.charAt(0)}
+            {recentUsers.length > 0 ? (
+              <div className="divide-y divide-gray-100">
+                {recentUsers.map((user) => (
+                  <div key={user._id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-medium">
+                        {user.name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{user.name || '-'}</p>
+                        <p className="text-xs text-gray-500">{user.email || ''}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                      <p className="text-xs text-gray-500">{user.email}</p>
+                    <div className="text-right">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        user.role === 'admin' ? 'bg-red-100 text-red-800' : 
+                        user.role === 'instructor' ? 'bg-purple-100 text-purple-800' : 
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {user.role === 'admin' ? 'Admin' : user.role === 'instructor' ? 'Giáo viên' : 'Học viên'}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">{formatDate(user.created_at)}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      user.role === 'instructor' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {user.role === 'instructor' ? 'Giáo viên' : 'Học viên'}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">{formatDate(user.createdAt)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-6 py-8 text-center text-gray-500">
+                Chưa có người dùng nào
+              </div>
+            )}
           </div>
 
-          {/* Recent Enrollments */}
+          {/* Pending Enrollments */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Đăng ký gần đây</h3>
-              <a href="/admin/enrollments" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+              <h3 className="text-lg font-semibold text-gray-900">Đăng ký chờ duyệt</h3>
+              <Link to="/admin/enrollments" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
                 Xem tất cả
-              </a>
+              </Link>
             </div>
-            <div className="divide-y divide-gray-100">
-              {recentEnrollments.map((enrollment) => (
-                <div key={enrollment._id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{enrollment.user.name}</p>
-                    <p className="text-xs text-gray-500">{enrollment.course.title}</p>
+            {recentEnrollments.length > 0 ? (
+              <div className="divide-y divide-gray-100">
+                {recentEnrollments.map((enrollment) => (
+                  <div key={enrollment._id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{enrollment.user_id?.name || '-'}</p>
+                      <p className="text-xs text-gray-500">{enrollment.course_id?.title || '-'}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                        Chờ duyệt
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">{formatDate(enrollment.enrolled_at)}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      enrollment.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {enrollment.status === 'active' ? 'Đang học' : 'Chờ duyệt'}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">{formatDate(enrollment.enrolledAt)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-6 py-8 text-center text-gray-500">
+                Không có đăng ký nào chờ duyệt
+              </div>
+            )}
           </div>
         </div>
 
@@ -209,26 +207,26 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Thao tác nhanh</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <a
-              href="/admin/users"
+            <Link
+              to="/admin/users"
               className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
             >
               <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
                 <UsersIcon />
               </div>
               <span className="text-sm font-medium text-gray-700">Quản lý người dùng</span>
-            </a>
-            <a
-              href="/admin/courses"
+            </Link>
+            <Link
+              to="/admin/courses"
               className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
             >
               <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600">
                 <CourseIcon />
               </div>
               <span className="text-sm font-medium text-gray-700">Quản lý khóa học</span>
-            </a>
-            <a
-              href="/admin/categories"
+            </Link>
+            <Link
+              to="/admin/categories"
               className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
             >
               <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
@@ -237,16 +235,16 @@ export default function DashboardPage() {
                 </svg>
               </div>
               <span className="text-sm font-medium text-gray-700">Quản lý danh mục</span>
-            </a>
-            <a
-              href="/admin/payments"
+            </Link>
+            <Link
+              to="/admin/enrollments"
               className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
             >
               <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
-                <RevenueIcon />
+                <EnrollmentIcon />
               </div>
-              <span className="text-sm font-medium text-gray-700">Duyệt thanh toán</span>
-            </a>
+              <span className="text-sm font-medium text-gray-700">Duyệt đăng ký</span>
+            </Link>
           </div>
         </div>
       </div>

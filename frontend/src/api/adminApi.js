@@ -1,49 +1,62 @@
 import api from './axios';
 
 export const adminApi = {
-  // Dashboard stats
+  // Dashboard stats - sẽ tạo API riêng cho dashboard
   getStats: () => api.get('/admin/stats'),
 
-  // Users
-  getUsers: (params) => api.get('/admin/users', { params }),
-  getUser: (id) => api.get(`/admin/users/${id}`),
-  createUser: (data) => api.post('/admin/users', data),
-  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
-  deleteUser: (id) => api.delete(`/admin/users/${id}`),
-  toggleUserStatus: (id) => api.patch(`/admin/users/${id}/toggle-status`),
+  // === USERS (GET /api/users) ===
+  getUsers: (params) => api.get('/users', { params }),
+  getUser: (id) => api.get(`/users/${id}`),
+  createUser: (data) => api.post('/users', data),
+  updateUser: (id, data) => api.put(`/users/${id}`, data),
+  deleteUser: (id) => api.delete(`/users/${id}`),
+  setUserStatus: (id, is_active) => api.patch(`/users/${id}/status`, { is_active }),
+  setUserRole: (id, role) => api.patch(`/users/${id}/role`, { role }),
 
-  // Courses
-  getCourses: (params) => api.get('/admin/courses', { params }),
-  getCourse: (id) => api.get(`/admin/courses/${id}`),
-  createCourse: (data) => api.post('/admin/courses', data),
-  updateCourse: (id, data) => api.put(`/admin/courses/${id}`, data),
-  deleteCourse: (id) => api.delete(`/admin/courses/${id}`),
-  approveCourse: (id) => api.patch(`/admin/courses/${id}/approve`),
-  rejectCourse: (id, reason) => api.patch(`/admin/courses/${id}/reject`, { reason }),
+  // === COURSES ===
+  // GET /api/courses/admin/all - tất cả khóa cho admin
+  getCourses: (params) => api.get('/courses/admin/all', { params }),
+  // GET /api/courses/:id
+  getCourse: (id) => api.get(`/courses/${id}`),
+  // POST /api/courses - tạo khóa học
+  createCourse: (data) => api.post('/courses', data),
+  // PUT /api/courses/:id - cập nhật
+  updateCourse: (id, data) => api.put(`/courses/${id}`, data),
+  // DELETE /api/courses/:id
+  deleteCourse: (id) => api.delete(`/courses/${id}`),
+  // Publish/unpublish course (thêm trường is_published)
+  publishCourse: (id) => api.put(`/courses/${id}`, { is_published: 1 }),
+  unpublishCourse: (id) => api.put(`/courses/${id}`, { is_published: 0 }),
 
-  // Categories
-  getCategories: (params) => api.get('/admin/categories', { params }),
-  getCategory: (id) => api.get(`/admin/categories/${id}`),
-  createCategory: (data) => api.post('/admin/categories', data),
-  updateCategory: (id, data) => api.put(`/admin/categories/${id}`, data),
-  deleteCategory: (id) => api.delete(`/admin/categories/${id}`),
+  // === CATEGORIES ===
+  getCategories: (params) => api.get('/categories', { params }),
+  getCategory: (id) => api.get(`/categories/${id}`),
+  createCategory: (data) => api.post('/categories', data),
+  updateCategory: (id, data) => api.put(`/categories/${id}`, data),
+  deleteCategory: (id) => api.delete(`/categories/${id}`),
 
-  // Enrollments
-  getEnrollments: (params) => api.get('/admin/enrollments', { params }),
-  getEnrollment: (id) => api.get(`/admin/enrollments/${id}`),
-  approveEnrollment: (id) => api.patch(`/admin/enrollments/${id}/approve`),
-  cancelEnrollment: (id) => api.delete(`/admin/enrollments/${id}`),
+  // === ENROLLMENTS ===
+  // GET /api/enrollments/admin/pending - danh sách chờ duyệt
+  getPendingEnrollments: () => api.get('/enrollments/admin/pending'),
+  // GET /api/enrollments - tất cả enrollment (thêm query)
+  getEnrollments: (params) => api.get('/enrollments', { params }),
+  // PATCH /api/enrollments/admin/:id/approve
+  approveEnrollment: (id) => api.patch(`/enrollments/admin/${id}/approve`),
+  // DELETE /api/enrollments/course/:courseId
+  cancelEnrollment: (courseId) => api.delete(`/enrollments/course/${courseId}`),
 
-  // Payments
-  getPayments: (params) => api.get('/admin/payments', { params }),
-  getPayment: (id) => api.get(`/admin/payments/${id}`),
-  approvePayment: (id) => api.patch(`/admin/payments/${id}/approve`),
-  rejectPayment: (id, reason) => api.patch(`/admin/payments/${id}/reject`, { reason }),
+  // === PAYMENTS ===
+  getPayments: (params) => api.get('/payments', { params }),
+  getPayment: (id) => api.get(`/payments/${id}`),
+  approvePayment: (id) => api.patch(`/payments/${id}/approve`),
+  rejectPayment: (id, reason) => api.patch(`/payments/${id}/reject`, { reason }),
 
-  // Quizzes
-  getQuizzes: (params) => api.get('/admin/quizzes', { params }),
-  getQuiz: (id) => api.get(`/admin/quizzes/${id}`),
-  createQuiz: (data) => api.post('/admin/quizzes', data),
-  updateQuiz: (id, data) => api.put(`/admin/quizzes/${id}`, data),
-  deleteQuiz: (id) => api.delete(`/admin/quizzes/${id}`),
+  // === QUIZZES ===
+  getQuizzes: (params) => api.get('/quizzes', { params }),
+  getQuiz: (id) => api.get(`/quizzes/${id}/detail`),
+  createQuiz: (data) => api.post('/quizzes', data),
+  updateQuiz: (id, data) => api.put(`/quizzes/${id}`, data),
+  deleteQuiz: (id) => api.delete(`/quizzes/${id}`),
+  addQuizQuestion: (quizId, data) => api.post(`/quizzes/${quizId}/questions`, data),
+  getQuizForTake: (id) => api.get(`/quizzes/${id}/take`),
 };

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
+import { adminApi } from '../../api/adminApi';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -18,39 +20,50 @@ const StarIcon = () => (
 export default function CourseManagement() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
+  const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     price: '',
-    category: '',
-    instructor: '',
+    category_id: '',
+    level: 'beginner',
     thumbnail: '',
-    status: 'pending',
+    is_published: 0,
   });
+
+  const fetchCourses = async (page = 1, searchTerm = search) => {
+    try {
+      setLoading(true);
+      const params = { page, limit: pagination.limit };
+      if (searchTerm) params.search = searchTerm;
+
+      const response = await adminApi.getCourses(params);
+      if (response.data.success) {
+        setCourses(response.data.data.courses);
+        setPagination(response.data.data.pagination);
+      }
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      toast.error('Không thể tải danh sách khóa học');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchCourses();
   }, []);
 
-  const fetchCourses = async () => {
-    try {
-      setLoading(true);
-      // Mock data - will connect to real API
-      setCourses([
-        { _id: '1', title: 'React cơ bản', description: 'Học React từ đầu', price: 499000, category: 'Programming', instructor: 'Nguyễn Văn A', students: 120, rating: 4.8, status: 'approved' },
-        { _id: '2', title: 'Node.js Advanced', description: 'Node.js nâng cao', price: 799000, category: 'Backend', instructor: 'Trần Thị B', students: 85, rating: 4.6, status: 'approved' },
-        { _id: '3', title: 'Python for Data Science', description: 'Python cho khoa học dữ liệu', price: 699000, category: 'Data Science', instructor: 'Lê Văn C', students: 200, rating: 4.9, status: 'pending' },
-        { _id: '4', title: 'Docker & Kubernetes', description: 'Container orchestration', price: 599000, category: 'DevOps', instructor: 'Phạm Thị D', students: 65, rating: 4.7, status: 'approved' },
-        { _id: '5', title: 'TypeScript Masterclass', description: 'TypeScript toàn tập', price: 549000, category: 'Programming', instructor: 'Hoàng Văn E', students: 95, rating: 4.5, status: 'pending' },
-        { _id: '6', title: 'MongoDB Fundamentals', description: 'Cơ sở dữ liệu MongoDB', price: 449000, category: 'Database', instructor: 'Đặng Thị F', students: 50, rating: 4.4, status: 'rejected' },
-      ]);
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleSearch = (value) => {
+    setSearch(value);
+    fetchCourses(1, value);
+  };
+
+  const handlePageChange = (page) => {
+    fetchCourses(page, search);
   };
 
   const formatCurrency = (value) => {
@@ -58,40 +71,53 @@ export default function CourseManagement() {
       style: 'currency',
       currency: 'VND',
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   const columns = [
-    { key: 'title', label: 'Tên khóa học' },
-    { key: 'category', label: 'Danh mục' },
-    { key: 'instructor', label: 'Giáo viên' },
+    {
+      key: 'title',
+      label: 'Tên khóa học',
+      render: (value, item) => (
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center overflow-hidden">
+            {item.thumbnail ? (
+              <img src={item.thumbnail} alt={value} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xl">📚</span>
+            )}
+          </div>
+          <span className="font-medium text-gray-900">{value}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'category_id',
+      label: 'Danh mục',
+      render: (value) => <span className="text-gray-700">{value?.name || '-'}</span>,
+    },
+    {
+      key: 'instructor_id',
+      label: 'Giáo viên',
+      render: (value) => <span className="text-gray-700">{value?.name || '-'}</span>,
+    },
     {
       key: 'price',
       label: 'Giá',
       render: (value) => <span className="font-medium text-gray-900">{formatCurrency(value)}</span>,
     },
-    { key: 'students', label: 'Học viên' },
     {
-      key: 'rating',
-      label: 'Đánh giá',
-      render: (value) => (
-        <div className="flex items-center gap-1 text-yellow-500">
-          <StarIcon />
-          <span className="text-gray-900">{value}</span>
-        </div>
-      ),
+      key: 'student_count',
+      label: 'Học viên',
+      render: (value) => <span>{value || 0}</span>,
     },
     {
-      key: 'status',
+      key: 'is_published',
       label: 'Trạng thái',
       badge: true,
       render: (value) => {
-        const statusLabels = { approved: 'Đã duyệt', pending: 'Chờ duyệt', rejected: 'Từ chối' };
-        const statusColors = {
-          approved: 'bg-green-100 text-green-800',
-          pending: 'bg-yellow-100 text-yellow-800',
-          rejected: 'bg-red-100 text-red-800',
-        };
+        const statusLabels = { 1: 'Đã publish', 0: 'Nháp' };
+        const statusColors = { 1: 'bg-green-100 text-green-800', 0: 'bg-yellow-100 text-yellow-800' };
         return (
           <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[value]}`}>
             {statusLabels[value]}
@@ -103,33 +129,82 @@ export default function CourseManagement() {
 
   const handleEdit = (course) => {
     setEditingCourse(course);
-    setFormData(course);
+    setFormData({
+      title: course.title || '',
+      description: course.description || '',
+      price: course.price || '',
+      category_id: course.category_id?._id || '',
+      level: course.level || 'beginner',
+      thumbnail: course.thumbnail || '',
+      is_published: course.is_published || 0,
+    });
     setIsModalOpen(true);
   };
 
-  const handleDelete = (course) => {
+  const handlePublish = async (course) => {
+    try {
+      const response = await adminApi.publishCourse(course._id);
+      if (response.data.success) {
+        toast.success('Đã publish khóa học');
+        fetchCourses(pagination.page, search);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể publish khóa học');
+    }
+  };
+
+  const handleUnpublish = async (course) => {
+    try {
+      const response = await adminApi.unpublishCourse(course._id);
+      if (response.data.success) {
+        toast.success('Đã hủy publish khóa học');
+        fetchCourses(pagination.page, search);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể hủy publish');
+    }
+  };
+
+  const handleDelete = async (course) => {
     if (window.confirm(`Bạn có chắc muốn xóa khóa học "${course.title}"?`)) {
-      setCourses(courses.filter((c) => c._id !== course._id));
+      try {
+        const response = await adminApi.deleteCourse(course._id);
+        if (response.data.success) {
+          toast.success('Xóa khóa học thành công');
+          fetchCourses(pagination.page, search);
+        }
+      } catch (error) {
+        toast.error(error.response?.data?.message || 'Không thể xóa khóa học');
+      }
     }
   };
 
-  const handleApprove = (course) => {
-    setCourses(courses.map((c) => (c._id === course._id ? { ...c, status: 'approved' } : c)));
-  };
-
-  const handleReject = (course) => {
-    setCourses(courses.map((c) => (c._id === course._id ? { ...c, status: 'rejected' } : c)));
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingCourse) {
-      setCourses(courses.map((c) => (c._id === editingCourse._id ? { ...c, ...formData } : c)));
-    } else {
-      setCourses([{ ...formData, _id: Date.now().toString(), students: 0, rating: 0 }, ...courses]);
+    try {
+      const payload = {
+        ...formData,
+        price: Number(formData.price) || 0,
+      };
+
+      if (editingCourse) {
+        const response = await adminApi.updateCourse(editingCourse._id, payload);
+        if (response.data.success) {
+          toast.success('Cập nhật khóa học thành công');
+          setIsModalOpen(false);
+          fetchCourses(pagination.page, search);
+        }
+      } else {
+        const response = await adminApi.createCourse(payload);
+        if (response.data.success) {
+          toast.success('Tạo khóa học thành công');
+          setIsModalOpen(false);
+          fetchCourses(1, search);
+        }
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Có lỗi xảy ra');
     }
-    setIsModalOpen(false);
-    setEditingCourse(null);
   };
 
   return (
@@ -143,7 +218,15 @@ export default function CourseManagement() {
           <button
             onClick={() => {
               setEditingCourse(null);
-              setFormData({ title: '', description: '', price: '', category: '', instructor: '', thumbnail: '', status: 'pending' });
+              setFormData({
+                title: '',
+                description: '',
+                price: '',
+                category_id: '',
+                level: 'beginner',
+                thumbnail: '',
+                is_published: 0,
+              });
               setIsModalOpen(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -157,11 +240,21 @@ export default function CourseManagement() {
           title="Danh sách khóa học"
           columns={columns}
           data={courses}
-          searchKey="title"
+          searchKey="search"
           searchPlaceholder="Tìm theo tên..."
           onEdit={handleEdit}
           onDelete={handleDelete}
           loading={loading}
+          pagination={true}
+          pageSize={pagination.limit}
+          totalPages={pagination.pages}
+          currentPage={pagination.page}
+          onPageChange={handlePageChange}
+          onSearch={handleSearch}
+          customActions={[
+            { label: 'Publish', onClick: handlePublish, color: 'green' },
+            { label: 'Unpublish', onClick: handleUnpublish, color: 'yellow' },
+          ]}
         />
 
         <Modal
@@ -203,24 +296,26 @@ export default function CourseManagement() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục</label>
-                <input
-                  type="text"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cấp độ</label>
+                <select
+                  value={formData.level}
+                  onChange={(e) => setFormData({ ...formData, level: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required
-                />
+                >
+                  <option value="beginner">Người mới</option>
+                  <option value="intermediate">Trung cấp</option>
+                  <option value="advanced">Nâng cao</option>
+                </select>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giáo viên</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Thumbnail URL</label>
               <input
                 type="text"
-                value={formData.instructor}
-                onChange={(e) => setFormData({ ...formData, instructor: e.target.value })}
+                value={formData.thumbnail}
+                onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                required
+                placeholder="https://..."
               />
             </div>
             <div className="flex justify-end gap-3 pt-4">

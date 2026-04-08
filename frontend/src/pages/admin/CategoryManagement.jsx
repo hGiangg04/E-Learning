@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
+import { adminApi } from '../../api/adminApi';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -19,30 +21,27 @@ export default function CategoryManagement() {
     description: '',
     icon: '',
     color: '#3b82f6',
+    is_active: 1,
   });
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
 
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      // Mock data
-      setCategories([
-        { _id: '1', name: 'Programming', description: 'Lập trình và phát triển phần mềm', icon: '💻', color: '#3b82f6', courseCount: 15, createdAt: '2024-01-01' },
-        { _id: '2', name: 'Data Science', description: 'Khoa học dữ liệu và Machine Learning', icon: '📊', color: '#10b981', courseCount: 12, createdAt: '2024-01-02' },
-        { _id: '3', name: 'Web Development', description: 'Phát triển web front-end và back-end', icon: '🌐', color: '#8b5cf6', courseCount: 18, createdAt: '2024-01-03' },
-        { _id: '4', name: 'DevOps', description: 'CI/CD, Container và Cloud', icon: '🚀', color: '#f59e0b', courseCount: 8, createdAt: '2024-01-04' },
-        { _id: '5', name: 'Mobile Development', description: 'Phát triển ứng dụng di động', icon: '📱', color: '#ef4444', courseCount: 10, createdAt: '2024-01-05' },
-        { _id: '6', name: 'Database', description: 'Cơ sở dữ liệu và SQL', icon: '🗄️', color: '#06b6d4', courseCount: 6, createdAt: '2024-01-06' },
-      ]);
+      const response = await adminApi.getCategories();
+      if (response.data.success) {
+        setCategories(response.data.data.categories);
+      }
     } catch (error) {
       console.error('Error fetching categories:', error);
+      toast.error('Không thể tải danh sách danh mục');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const columns = [
     {
@@ -52,9 +51,9 @@ export default function CategoryManagement() {
         <div className="flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
-            style={{ backgroundColor: `${item.color}20` }}
+            style={{ backgroundColor: item.color ? `${item.color}20` : '#f3f4f6' }}
           >
-            {item.icon}
+            {item.icon || '📁'}
           </div>
           <div>
             <span className="font-medium text-gray-900">{value}</span>
@@ -63,31 +62,74 @@ export default function CategoryManagement() {
         </div>
       ),
     },
-    { key: 'courseCount', label: 'Số khóa học' },
-    { key: 'createdAt', label: 'Ngày tạo' },
+    {
+      key: 'is_active',
+      label: 'Trạng thái',
+      badge: true,
+      render: (value) => {
+        const statusLabels = { 1: 'Hoạt động', 0: 'Không hoạt động' };
+        const statusColors = { 1: 'bg-green-100 text-green-800', 0: 'bg-gray-100 text-gray-800' };
+        return (
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[value]}`}>
+            {statusLabels[value]}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'created_at',
+      label: 'Ngày tạo',
+      render: (value) => value ? new Date(value).toLocaleDateString('vi-VN') : '-',
+    },
   ];
 
   const handleEdit = (category) => {
     setEditingCategory(category);
-    setFormData(category);
+    setFormData({
+      name: category.name || '',
+      description: category.description || '',
+      icon: category.icon || '',
+      color: category.color || '#3b82f6',
+      is_active: category.is_active ?? 1,
+    });
     setIsModalOpen(true);
   };
 
-  const handleDelete = (category) => {
+  const handleDelete = async (category) => {
     if (window.confirm(`Bạn có chắc muốn xóa danh mục "${category.name}"?`)) {
-      setCategories(categories.filter((c) => c._id !== category._id));
+      try {
+        const response = await adminApi.deleteCategory(category._id);
+        if (response.data.success) {
+          toast.success('Xóa danh mục thành công');
+          fetchCategories();
+        }
+      } catch (error) {
+        toast.error(error.response?.data?.message || 'Không thể xóa danh mục');
+      }
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingCategory) {
-      setCategories(categories.map((c) => (c._id === editingCategory._id ? { ...c, ...formData } : c)));
-    } else {
-      setCategories([{ ...formData, _id: Date.now().toString(), courseCount: 0, createdAt: new Date().toISOString().split('T')[0] }, ...categories]);
+    try {
+      if (editingCategory) {
+        const response = await adminApi.updateCategory(editingCategory._id, formData);
+        if (response.data.success) {
+          toast.success('Cập nhật danh mục thành công');
+          setIsModalOpen(false);
+          fetchCategories();
+        }
+      } else {
+        const response = await adminApi.createCategory(formData);
+        if (response.data.success) {
+          toast.success('Thêm danh mục thành công');
+          setIsModalOpen(false);
+          fetchCategories();
+        }
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Có lỗi xảy ra');
     }
-    setIsModalOpen(false);
-    setEditingCategory(null);
   };
 
   return (
@@ -101,7 +143,7 @@ export default function CategoryManagement() {
           <button
             onClick={() => {
               setEditingCategory(null);
-              setFormData({ name: '', description: '', icon: '', color: '#3b82f6' });
+              setFormData({ name: '', description: '', icon: '', color: '#3b82f6', is_active: 1 });
               setIsModalOpen(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -120,6 +162,7 @@ export default function CategoryManagement() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           loading={loading}
+          actions={true}
         />
 
         <Modal
@@ -137,7 +180,6 @@ export default function CategoryManagement() {
                   onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                   placeholder="💻"
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-center text-2xl"
-                  required
                 />
               </div>
               <div className="col-span-3">
@@ -167,8 +209,18 @@ export default function CategoryManagement() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                required
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
+              <select
+                value={formData.is_active}
+                onChange={(e) => setFormData({ ...formData, is_active: Number(e.target.value) })}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value={1}>Hoạt động</option>
+                <option value={0}>Không hoạt động</option>
+              </select>
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <button

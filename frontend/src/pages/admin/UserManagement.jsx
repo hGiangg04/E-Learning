@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
+import { adminApi } from '../../api/adminApi';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -12,38 +14,47 @@ const PlusIcon = () => (
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
+  const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    role: 'user',
+    role: 'student',
   });
+
+  const fetchUsers = async (page = 1, searchTerm = search) => {
+    try {
+      setLoading(true);
+      const params = { page, limit: pagination.limit };
+      if (searchTerm) params.search = searchTerm;
+      
+      const response = await adminApi.getUsers(params);
+      if (response.data.success) {
+        setUsers(response.data.data.users);
+        setPagination(response.data.data.pagination);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast.error('Không thể tải danh sách người dùng');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      // Mock data - will connect to real API
-      setUsers([
-        { _id: '1', name: 'Nguyễn Văn A', email: 'vana@gmail.com', role: 'user', status: 'active', createdAt: '2024-01-15' },
-        { _id: '2', name: 'Trần Thị B', email: 'thib@gmail.com', role: 'instructor', status: 'active', createdAt: '2024-01-14' },
-        { _id: '3', name: 'Lê Văn C', email: 'vanc@gmail.com', role: 'user', status: 'inactive', createdAt: '2024-01-13' },
-        { _id: '4', name: 'Phạm Thị D', email: 'thid@gmail.com', role: 'instructor', status: 'active', createdAt: '2024-01-12' },
-        { _id: '5', name: 'Hoàng Văn E', email: 'vane@gmail.com', role: 'user', status: 'active', createdAt: '2024-01-11' },
-        { _id: '6', name: 'Đặng Thị F', email: 'thif@gmail.com', role: 'user', status: 'pending', createdAt: '2024-01-10' },
-        { _id: '7', name: 'Bùi Văn G', email: 'vang@gmail.com', role: 'instructor', status: 'active', createdAt: '2024-01-09' },
-        { _id: '8', name: 'Ngô Thị H', email: 'thih@gmail.com', role: 'user', status: 'active', createdAt: '2024-01-08' },
-      ]);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleSearch = (value) => {
+    setSearch(value);
+    fetchUsers(1, value);
+  };
+
+  const handlePageChange = (page) => {
+    fetchUsers(page, search);
   };
 
   const columns = [
@@ -53,7 +64,7 @@ export default function UserManagement() {
       render: (value, item) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-medium">
-            {value.charAt(0)}
+            {value?.charAt(0)?.toUpperCase() || '?'}
           </div>
           <span className="font-medium text-gray-900">{value}</span>
         </div>
@@ -65,30 +76,26 @@ export default function UserManagement() {
       label: 'Vai trò',
       badge: true,
       render: (value) => {
-        const roleLabels = { admin: 'Admin', instructor: 'Giáo viên', user: 'Học viên' };
+        const roleLabels = { admin: 'Admin', instructor: 'Giáo viên', student: 'Học viên' };
         const roleColors = {
           admin: 'bg-red-100 text-red-800',
           instructor: 'bg-purple-100 text-purple-800',
-          user: 'bg-blue-100 text-blue-800',
+          student: 'bg-blue-100 text-blue-800',
         };
         return (
-          <span className={`px-2 py-1 text-xs font-medium rounded-full ${roleColors[value]}`}>
-            {roleLabels[value]}
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${roleColors[value] || 'bg-gray-100 text-gray-800'}`}>
+            {roleLabels[value] || value}
           </span>
         );
       },
     },
     {
-      key: 'status',
+      key: 'is_active',
       label: 'Trạng thái',
       badge: true,
       render: (value) => {
-        const statusLabels = { active: 'Hoạt động', inactive: 'Khóa', pending: 'Chờ duyệt' };
-        const statusColors = {
-          active: 'bg-green-100 text-green-800',
-          inactive: 'bg-gray-100 text-gray-800',
-          pending: 'bg-yellow-100 text-yellow-800',
-        };
+        const statusLabels = { 1: 'Hoạt động', 0: 'Khóa' };
+        const statusColors = { 1: 'bg-green-100 text-green-800', 0: 'bg-gray-100 text-gray-800' };
         return (
           <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[value]}`}>
             {statusLabels[value]}
@@ -96,36 +103,85 @@ export default function UserManagement() {
         );
       },
     },
-    { key: 'createdAt', label: 'Ngày tạo' },
+    {
+      key: 'created_at',
+      label: 'Ngày tạo',
+      render: (value) => value ? new Date(value).toLocaleDateString('vi-VN') : '-',
+    },
   ];
 
   const handleEdit = (user) => {
     setEditingUser(user);
     setFormData({
-      name: user.name,
-      email: user.email,
+      name: user.name || '',
+      email: user.email || '',
       password: '',
-      role: user.role,
+      role: user.role || 'student',
     });
     setIsModalOpen(true);
   };
 
-  const handleDelete = (user) => {
-    if (window.confirm(`Bạn có chắc muốn xóa người dùng "${user.name}"?`)) {
-      setUsers(users.filter((u) => u._id !== user._id));
+  const handleToggleStatus = async (user) => {
+    const newStatus = user.is_active === 1 ? 0 : 1;
+    try {
+      const response = await adminApi.setUserStatus(user._id, newStatus);
+      if (response.data.success) {
+        toast.success(newStatus === 1 ? 'Đã kích hoạt tài khoản' : 'Đã khóa tài khoản');
+        fetchUsers(pagination.page, search);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể thay đổi trạng thái');
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (editingUser) {
-      setUsers(users.map((u) => (u._id === editingUser._id ? { ...u, ...formData } : u)));
-    } else {
-      setUsers([{ ...formData, _id: Date.now().toString(), status: 'active', createdAt: new Date().toISOString().split('T')[0] }, ...users]);
+  const handleChangeRole = async (user) => {
+    const newRole = user.role === 'admin' ? 'student' : 'admin';
+    try {
+      const response = await adminApi.setUserRole(user._id, newRole);
+      if (response.data.success) {
+        toast.success('Đã cập nhật vai trò');
+        fetchUsers(pagination.page, search);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể thay đổi vai trò');
     }
-    setIsModalOpen(false);
-    setEditingUser(null);
-    setFormData({ name: '', email: '', password: '', role: 'user' });
+  };
+
+  const handleDelete = async (user) => {
+    if (window.confirm(`Bạn có chắc muốn xóa người dùng "${user.name}"?`)) {
+      try {
+        const response = await adminApi.deleteUser(user._id);
+        if (response.data.success) {
+          toast.success('Xóa người dùng thành công');
+          fetchUsers(pagination.page, search);
+        }
+      } catch (error) {
+        toast.error(error.response?.data?.message || 'Không thể xóa người dùng');
+      }
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingUser) {
+        const response = await adminApi.updateUser(editingUser._id, formData);
+        if (response.data.success) {
+          toast.success('Cập nhật người dùng thành công');
+          setIsModalOpen(false);
+          fetchUsers(pagination.page, search);
+        }
+      } else {
+        const response = await adminApi.createUser(formData);
+        if (response.data.success) {
+          toast.success('Thêm người dùng thành công');
+          setIsModalOpen(false);
+          fetchUsers(1, search);
+        }
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Có lỗi xảy ra');
+    }
   };
 
   return (
@@ -139,7 +195,7 @@ export default function UserManagement() {
           <button
             onClick={() => {
               setEditingUser(null);
-              setFormData({ name: '', email: '', password: '', role: 'user' });
+              setFormData({ name: '', email: '', password: '', role: 'student' });
               setIsModalOpen(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -153,11 +209,21 @@ export default function UserManagement() {
           title="Danh sách người dùng"
           columns={columns}
           data={users}
-          searchKey="name"
-          searchPlaceholder="Tìm theo tên..."
+          searchKey="search"
+          searchPlaceholder="Tìm theo tên, email..."
           onEdit={handleEdit}
           onDelete={handleDelete}
           loading={loading}
+          pagination={true}
+          pageSize={pagination.limit}
+          totalPages={pagination.pages}
+          currentPage={pagination.page}
+          onPageChange={handlePageChange}
+          onSearch={handleSearch}
+          customActions={[
+            { label: 'Đổi vai trò', onClick: handleChangeRole, color: 'purple' },
+            { label: 'Khóa/Mở', onClick: handleToggleStatus, color: 'yellow' },
+          ]}
         />
 
         <Modal
@@ -197,7 +263,7 @@ export default function UserManagement() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required={!editingUser}
+                  required
                 />
               </div>
             )}
@@ -208,7 +274,7 @@ export default function UserManagement() {
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="user">Học viên</option>
+                <option value="student">Học viên</option>
                 <option value="instructor">Giáo viên</option>
                 <option value="admin">Admin</option>
               </select>
