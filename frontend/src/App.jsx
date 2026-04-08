@@ -16,6 +16,7 @@ import './index.css';
 import DashboardPage from './pages/admin/DashboardPage';
 import UserManagement from './pages/admin/UserManagement';
 import CourseManagement from './pages/admin/CourseManagement';
+import LessonManagement from './pages/admin/LessonManagement';
 import CategoryManagement from './pages/admin/CategoryManagement';
 import EnrollmentManagement from './pages/admin/EnrollmentManagement';
 import PaymentManagement from './pages/admin/PaymentManagement';
@@ -42,6 +43,7 @@ function App() {
         <Route path="/admin" element={<DashboardPage />} />
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/courses" element={<CourseManagement />} />
+        <Route path="/admin/lessons" element={<LessonManagement />} />
         <Route path="/admin/categories" element={<CategoryManagement />} />
         <Route path="/admin/enrollments" element={<EnrollmentManagement />} />
         <Route path="/admin/payments" element={<PaymentManagement />} />

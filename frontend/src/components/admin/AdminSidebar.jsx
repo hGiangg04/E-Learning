@@ -44,6 +44,13 @@ const QuizIcon = () => (
   </svg>
 );
 
+const LessonIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
 const LogoutIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -54,6 +61,7 @@ const menuItems = [
   { label: 'Dashboard', path: '/admin', icon: <DashboardIcon /> },
   { label: 'Người dùng', path: '/admin/users', icon: <UsersIcon /> },
   { label: 'Khóa học', path: '/admin/courses', icon: <CourseIcon /> },
+  { label: 'Bài học', path: '/admin/lessons', icon: <LessonIcon /> },
   { label: 'Danh mục', path: '/admin/categories', icon: <CategoryIcon /> },
   { label: 'Đăng ký', path: '/admin/enrollments', icon: <EnrollmentIcon /> },
   { label: 'Thanh toán', path: '/admin/payments', icon: <PaymentIcon /> },
