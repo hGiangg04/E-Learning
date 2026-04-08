@@ -72,11 +72,10 @@ const userSchema = new mongoose.Schema({
     }
 });
 
-// Hash password khi password bị thay đổi
-userSchema.pre('save', async function(next) {
-    if (!this.isModified('password') || !this.password) return next();
+// Hash password khi password bị thay đổi (Mongoose 9: không dùng callback next, chỉ async/await)
+userSchema.pre('save', async function () {
+    if (!this.isModified('password') || !this.password) return;
     this.password = await bcrypt.hash(this.password, 12);
-    next();
 });
 
 // So sánh password

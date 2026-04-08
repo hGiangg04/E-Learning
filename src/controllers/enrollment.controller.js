@@ -8,6 +8,38 @@ function generateOrderCode() {
 }
 
 const enrollmentController = {
+    // GET /api/enrollments/access/:courseId — đã ghi danh / có thể học chưa
+    checkCourseAccess: async (req, res) => {
+        try {
+            const { courseId } = req.params;
+            if (!mongoose.Types.ObjectId.isValid(courseId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'courseId không hợp lệ'
+                });
+            }
+
+            const enrollment = await Enrollment.findOne({
+                user_id: req.user._id,
+                course_id: courseId
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    enrolled: !!enrollment,
+                    status: enrollment?.status ?? null,
+                    canLearn: enrollment?.status === 'active'
+                }
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+    },
+
     getMyEnrollments: async (req, res) => {
         try {
             const enrollments = await Enrollment.find({ user_id: req.user._id })

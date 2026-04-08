@@ -15,6 +15,11 @@ const lessonSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    /** Mục tiêu bài học (HTML hoặc văn bản) — hiển thị riêng trên trang học */
+    objectives: {
+        type: String,
+        default: ''
+    },
     video_url: {
         type: String,
         default: ''
