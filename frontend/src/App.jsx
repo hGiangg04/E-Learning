@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import CoursesPage from './pages/CoursesPage';
 import CourseDetailPage from './pages/CourseDetailPage';
+import LessonLearnPage from './pages/LessonLearnPage';
 import AboutPage from './pages/AboutPage';
 import CategoriesPage from './pages/CategoriesPage';
 import ProfilePage from './pages/ProfilePage';
@@ -33,6 +34,7 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/courses" element={<CoursesPage />} />
+        <Route path="/courses/:courseId/lesson/:lessonId" element={<LessonLearnPage />} />
         <Route path="/courses/:id" element={<CourseDetailPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/categories" element={<CategoriesPage />} />

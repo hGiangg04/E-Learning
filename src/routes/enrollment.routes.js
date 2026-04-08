@@ -9,6 +9,7 @@ router.use(authMiddleware);
 router.get('/admin/pending', adminOnly, enrollmentController.listPending);
 router.patch('/admin/:id/approve', adminOnly, enrollmentController.approveByAdmin);
 
+router.get('/access/:courseId', enrollmentController.checkCourseAccess);
 router.get('/', enrollmentController.getMyEnrollments);
 router.post('/', enrollmentController.enrollCourse);
 router.delete('/course/:courseId', enrollmentController.cancelEnrollment);

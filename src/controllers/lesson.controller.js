@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Lesson = require('../models/lesson.model');
 const Course = require('../models/course.model');
+const Enrollment = require('../models/enrollment.model');
 
 const lessonController = {
     // GET /api/lessons/course/:courseId — sắp xếp theo position
@@ -32,7 +33,7 @@ const lessonController = {
         }
     },
 
-    // GET /api/lessons/:id
+    // GET /api/lessons/:id — cần đăng nhập; nội dung đầy đủ chỉ khi đã ghi danh active, admin, hoặc bài miễn phí
     getLessonById: async (req, res) => {
         try {
             const lesson = await Lesson.findById(req.params.id);
@@ -40,6 +41,36 @@ const lessonController = {
                 return res.status(404).json({
                     success: false,
                     message: 'Bài học không tồn tại'
+                });
+            }
+
+            const courseId = lesson.course_id;
+
+            if (req.user.role === 'admin') {
+                return res.json({
+                    success: true,
+                    data: { lesson }
+                });
+            }
+
+            if (Number(lesson.is_free) === 1) {
+                return res.json({
+                    success: true,
+                    data: { lesson }
+                });
+            }
+
+            const enrollment = await Enrollment.findOne({
+                user_id: req.user._id,
+                course_id: courseId,
+                status: 'active'
+            });
+
+            if (!enrollment) {
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        'Bạn cần ghi danh và được kích hoạt khóa học (trạng thái active) để xem bài học này'
                 });
             }
 

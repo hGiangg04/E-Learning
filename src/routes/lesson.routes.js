@@ -4,9 +4,11 @@ const { authMiddleware, contentAdminOnly } = require('../middleware/auth.middlew
 
 const router = express.Router();
 
-// Routes công khai
+// Routes công khai — danh sách bài (không có content)
 router.get('/course/:courseId', lessonController.getLessonsByCourse);
-router.get('/:id', lessonController.getLessonById);
+
+// Chi tiết bài học — cần JWT (kiểm tra ghi danh trong controller)
+router.get('/:id', authMiddleware, lessonController.getLessonById);
 
 // Routes cần đăng nhập
 router.post('/', authMiddleware, contentAdminOnly, lessonController.createLesson);
