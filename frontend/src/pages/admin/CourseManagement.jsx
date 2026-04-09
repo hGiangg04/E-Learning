@@ -33,7 +33,6 @@ export default function CourseManagement() {
     description: '',
     price: '',
     category_id: '',
-    level: 'beginner',
     thumbnail: '',
     is_published: 0,
   });
@@ -153,7 +152,6 @@ export default function CourseManagement() {
       description: course.description || '',
       price: course.price ?? '',
       category_id: categoryIdForForm(course),
-      level: course.level || 'beginner',
       thumbnail: course.thumbnail || '',
       is_published: course.is_published === 1 ? 1 : 0,
     });
@@ -237,7 +235,6 @@ export default function CourseManagement() {
         title: formData.title.trim(),
         description: formData.description,
         price: Number(formData.price) || 0,
-        level: formData.level,
         thumbnail: thumbnailForPayload(),
         is_published: Number(formData.is_published) === 1 ? 1 : 0,
         category_id: formData.category_id ? formData.category_id : null,
@@ -279,7 +276,6 @@ export default function CourseManagement() {
                 description: '',
                 price: '',
                 category_id: '',
-                level: 'beginner',
                 thumbnail: '',
                 is_published: 0,
               });
@@ -355,30 +351,17 @@ export default function CourseManagement() {
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Giá (VND)</label>
-                <input
-                  type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required
-                  min={0}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cấp độ</label>
-                <select
-                  value={formData.level}
-                  onChange={(e) => setFormData({ ...formData, level: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="beginner">Người mới</option>
-                  <option value="intermediate">Trung cấp</option>
-                  <option value="advanced">Nâng cao</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giá (VND)</label>
+              <input
+                type="number"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                min={0}
+                placeholder="Để trống = miễn phí (0đ)"
+              />
+              <p className="text-xs text-gray-500 mt-1">Không nhập giá thì khóa học được coi là miễn phí.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh thumbnail</label>
