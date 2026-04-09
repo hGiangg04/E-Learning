@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import PageLayout from '../components/PageLayout';
-import { courseService, enrollmentService, lessonService } from '../api';
+import { courseService, enrollmentService, lessonService, certificateService } from '../api';
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -14,6 +14,11 @@ export default function CourseDetailPage() {
   const [enrolling, setEnrolling] = useState(false);
   const [access, setAccess] = useState(null);
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+  /* ── Chứng chỉ ── */
+  const [myCert, setMyCert] = useState(null);
+  const [certLoading, setCertLoading] = useState(false);
+  const [generatingCert, setGeneratingCert] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -76,7 +81,37 @@ export default function CourseDetailPage() {
     };
   }, [id, token]);
 
-  const formatPrice = (price) => {
+  /* ── Load chứng chỉ ── */
+  useEffect(() => {
+    if (!id || !token) return;
+    let cancelled = false;
+    certificateService.checkCertificate(id)
+      .then(res => { if (!cancelled && res?.success) setMyCert(res.data?.certificate || null); })
+      .catch(() => { if (!cancelled) setMyCert(null); });
+    return () => { cancelled = true; };
+  }, [id, token]);
+
+  const handleGetCertificate = async () => {
+    if (!token) { toast.error('Vui lòng đăng nhập'); navigate('/login'); return; }
+    setGeneratingCert(true);
+    try {
+      const res = await certificateService.generateCertificate(id);
+      if (res?.success) {
+        setMyCert(res.data?.certificate || null);
+        toast.success(res.message || 'Chúc mừng bạn đã nhận được chứng chỉ!');
+      } else {
+        toast.error(res.message || 'Không thể tạo chứng chỉ');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Lỗi khi tạo chứng chỉ');
+    } finally {
+      setGeneratingCert(false);
+    }
+  };
+
+  const handleViewCert = () => {
+    navigate('/my-certificates');
+  };
     if (price === 0 || price == null) return 'Miễn phí';
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -230,6 +265,49 @@ export default function CourseDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* ── Chứng chỉ ── */}
+          {canLearn && (
+            <div className="mt-6 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 p-5">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-emerald-800 mb-1">Nhận chứng chỉ hoàn thành</h3>
+                  <p className="text-sm text-emerald-700 mb-3">
+                    Hoàn thành tối thiểu 80% khóa học để nhận chứng chỉ.
+                  </p>
+                  {myCert ? (
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Đã có chứng chỉ
+                      </span>
+                      <button
+                        onClick={handleViewCert}
+                        className="text-sm text-emerald-700 hover:text-emerald-900 font-medium underline"
+                      >
+                        Xem &amp; tải
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleGetCertificate}
+                      disabled={generatingCert}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      {generatingCert ? 'Đang kiểm tra…' : 'Nhận chứng chỉ'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Danh sách bài học */}
           <section id="curriculum" className="mt-10 rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">

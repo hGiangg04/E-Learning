@@ -134,6 +134,21 @@ export default function Navbar() {
                     >
                       Khóa học của tôi
                     </Link>
+                    <Link
+                      to="/my-certificates"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Chứng chỉ của tôi
+                    </Link>
+                    {user?.role === 'admin' && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Quản lý Admin
+                      </Link>
+                    )}
                     <hr className="my-2" />
                     <button
                       onClick={handleLogout}
@@ -202,6 +217,14 @@ export default function Navbar() {
                   <Link to="/my-courses" className="text-sm text-gray-600">
                     Khóa học của tôi
                   </Link>
+                  <Link to="/my-certificates" className="text-sm text-gray-600">
+                    Chứng chỉ của tôi
+                  </Link>
+                  {user?.role === 'admin' && (
+                    <Link to="/admin" className="text-sm text-gray-600">
+                      Quản lý Admin
+                    </Link>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="text-left text-sm text-red-600"
