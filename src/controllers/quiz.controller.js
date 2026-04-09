@@ -1,9 +1,21 @@
+const mongoose = require('mongoose');
 const Quiz = require('../models/quiz.model');
 const QuizQuestion = require('../models/quizQuestion.model');
 const QuestionOption = require('../models/questionOption.model');
 const QuizAttempt = require('../models/quizAttempt.model');
 const QuizAnswer = require('../models/quizAnswer.model');
 const Enrollment = require('../models/enrollment.model');
+const Lesson = require('../models/lesson.model');
+
+function normalizeQuizBody(body) {
+    const out = { ...body };
+    const flags = ['shuffle_questions', 'shuffle_options', 'show_correct_answer', 'show_results_immediately', 'is_active'];
+    for (const k of flags) {
+        if (out[k] === true) out[k] = 1;
+        if (out[k] === false) out[k] = 0;
+    }
+    return out;
+}
 
 function shuffleArray(arr) {
     const a = [...arr];
@@ -38,7 +50,7 @@ const quizController = {
     getQuizByLesson: async (req, res) => {
         try {
             const { lessonId } = req.params;
-            const lesson = require('../models/lesson.model').findById(lessonId);
+            const lesson = await Lesson.findById(lessonId);
             if (!lesson) {
                 return res.status(404).json({ success: false, message: 'Lesson không tồn tại' });
             }
@@ -190,7 +202,14 @@ const quizController = {
 
     createQuiz: async (req, res) => {
         try {
-            const quiz = new Quiz(req.body);
+            if (!req.body.course_id || !mongoose.Types.ObjectId.isValid(String(req.body.course_id))) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'course_id không hợp lệ — chọn khóa học từ danh sách (ObjectId MongoDB)'
+                });
+            }
+            const body = normalizeQuizBody(req.body);
+            const quiz = new Quiz(body);
             await quiz.save();
             res.status(201).json({ success: true, message: 'Tạo quiz thành công', data: { quiz } });
         } catch (error) {
@@ -200,7 +219,11 @@ const quizController = {
 
     updateQuiz: async (req, res) => {
         try {
-            const quiz = await Quiz.findByIdAndUpdate(req.params.id, req.body, { new: true });
+            const body = normalizeQuizBody(req.body);
+            if (body.course_id != null && !mongoose.Types.ObjectId.isValid(String(body.course_id))) {
+                return res.status(400).json({ success: false, message: 'course_id không hợp lệ' });
+            }
+            const quiz = await Quiz.findByIdAndUpdate(req.params.id, body, { new: true });
             if (!quiz) {
                 return res.status(404).json({ success: false, message: 'Quiz không tồn tại' });
             }
