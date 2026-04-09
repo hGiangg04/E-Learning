@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react';
 import PageLayout from '../components/PageLayout';
 import ReviewsSection from '../components/ReviewsSection';
-import { courseService, enrollmentService, lessonService, wishlistService } from '../api';
+import { courseService, enrollmentService, lessonService, wishlistService, cartService } from '../api';
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -17,6 +17,8 @@ export default function CourseDetailPage() {
   const [access, setAccess] = useState(null);
   const [inWishlist, setInWishlist] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [inCart, setInCart] = useState(false);
+  const [cartLoading, setCartLoading] = useState(false);
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   useEffect(() => {
@@ -93,6 +95,22 @@ export default function CourseDetailPage() {
       .catch(() => setInWishlist(false));
   }, [id, token]);
 
+  // Kiểm tra cart
+  useEffect(() => {
+    if (!id || !token) {
+      setInCart(false);
+      return;
+    }
+    cartService.getMyCart()
+      .then(res => {
+        if (res.success) {
+          const hasItem = res.data?.items?.some(item => String(item.course._id) === String(id));
+          setInCart(!!hasItem);
+        }
+      })
+      .catch(() => setInCart(false));
+  }, [id, token]);
+
   const formatPrice = (price) => {
     if (price === 0 || price == null) return 'Miễn phí';
     return new Intl.NumberFormat('vi-VN', {
@@ -155,8 +173,36 @@ export default function CourseDetailPage() {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Có lỗi xảy ra');
-    } finally {
+      } finally {
       setWishlistLoading(false);
+    }
+  };
+
+  const toggleCart = async () => {
+    if (!token) {
+      toast.error('Vui lòng đăng nhập để thêm vào giỏ hàng');
+      navigate('/login');
+      return;
+    }
+    if (course.price === 0) {
+      toast.error('Khóa học miễn phí, vui lòng đăng ký trực tiếp');
+      return;
+    }
+    setCartLoading(true);
+    try {
+      if (inCart) {
+        await cartService.removeFromCart(id);
+        setInCart(false);
+        toast.success('Đã xóa khỏi giỏ hàng');
+      } else {
+        await cartService.addToCart(id);
+        setInCart(true);
+        toast.success('Đã thêm vào giỏ hàng');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Có lỗi xảy ra');
+    } finally {
+      setCartLoading(false);
     }
   };
 
@@ -272,6 +318,22 @@ export default function CourseDetailPage() {
                     <span className="px-4 py-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-center">
                       Đang chờ duyệt / thanh toán
                     </span>
+                  ) : course.price > 0 ? (
+                    <button
+                      type="button"
+                      onClick={toggleCart}
+                      disabled={cartLoading}
+                      className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border transition-colors disabled:opacity-60 ${
+                        inCart
+                          ? 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100'
+                          : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                      }`}
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      {inCart ? 'Đã thêm vào giỏ' : 'Thêm vào giỏ hàng'}
+                    </button>
                   ) : (
                     <button
                       type="button"

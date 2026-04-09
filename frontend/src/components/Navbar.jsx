@@ -217,6 +217,9 @@ export default function Navbar() {
                   <Link to="/certificates" className="text-sm text-gray-600">
                     Chứng chỉ
                   </Link>
+                  <Link to="/cart" className="text-sm text-gray-600 relative">
+                    Giỏ hàng
+                  </Link>
                   <Link to="/my-courses" className="text-sm text-gray-600">
                     Khóa học của tôi
                   </Link>
