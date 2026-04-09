@@ -2,7 +2,152 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import PageLayout from '../components/PageLayout';
-import { courseService, enrollmentService, lessonService } from '../api';
+import { courseService, enrollmentService, lessonService, reviewService, commentService } from '../api';
+
+/* ─── Shared star rating display ─── */
+function StarRow({ rating, size = 'sm' }) {
+  const dim = size === 'sm' ? 'w-3.5 h-3.5' : 'w-5 h-5';
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1,2,3,4,5].map(n => (
+        <svg key={n} className={`${dim} ${n <= Math.round(rating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Single comment item (top-level + replies) ─── */
+function CommentItem({ comment, currentUserId, onDelete, onReplySubmit, onCancelReply }) {
+  const [showReply, setShowReply] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const isMine = currentUserId && comment.user_id?._id === currentUserId;
+
+  const handleReply = async (e) => {
+    e.preventDefault();
+    if (!replyText.trim()) return;
+    setSubmitting(true);
+    const res = await onReplySubmit(comment._id, replyText.trim());
+    setSubmitting(false);
+    if (res?.success) {
+      setReplyText('');
+      setShowReply(false);
+    }
+  };
+
+  return (
+    <div className="py-3">
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold uppercase">
+          {comment.user_id?.name?.[0] || '?'}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-medium text-sm text-gray-900">{comment.user_id?.name || 'Học viên ẩn danh'}</span>
+            <span className="text-xs text-gray-400">{new Date(comment.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+          </div>
+          <p className="text-sm text-gray-700 whitespace-pre-line">{comment.content}</p>
+          <div className="flex items-center gap-3 mt-1.5">
+            {currentUserId && (
+              <button onClick={() => setShowReply(v => !v)} className="text-xs text-primary-600 hover:underline">
+                {showReply ? 'Ẩn trả lời' : 'Trả lời'}
+              </button>
+            )}
+            {isMine && (
+              <button onClick={() => onDelete(comment._id)} className="text-xs text-red-500 hover:underline">
+                Xóa
+              </button>
+            )}
+          </div>
+
+          {showReply && (
+            <form onSubmit={handleReply} className="mt-2 flex gap-2">
+              <input
+                type="text"
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder="Viết trả lời…"
+                maxLength={500}
+                className="flex-1 text-sm px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <button type="submit" disabled={submitting || !replyText.trim()} className="text-xs px-3 py-1.5 bg-primary-600 text-white rounded-lg disabled:opacity-60">
+                {submitting ? '…' : 'Gửi'}
+              </button>
+              {onCancelReply && <button type="button" onClick={() => { setShowReply(false); setReplyText(''); }} className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50">Hủy</button>}
+            </form>
+          )}
+
+          {/* Replies */}
+          {comment.replies?.length > 0 && (
+            <div className="mt-3 ml-4 pl-3 border-l-2 border-gray-100 space-y-2">
+              {comment.replies.map(reply => {
+                const replyMine = currentUserId && reply.user_id?._id === currentUserId;
+                return (
+                  <div key={reply._id} className="flex items-start gap-2">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-semibold uppercase">
+                      {reply.user_id?.name?.[0] || '?'}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="font-medium text-xs text-gray-900">{reply.user_id?.name || 'Học viên'}</span>
+                        <span className="text-xs text-gray-400">{new Date(reply.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })}</span>
+                      </div>
+                      <p className="text-xs text-gray-700 whitespace-pre-line">{reply.content}</p>
+                      {replyMine && (
+                        <button onClick={() => onDelete(reply._id)} className="text-xs text-red-400 hover:underline mt-0.5">Xóa</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Review form (inline stars) ─── */
+function ReviewForm({ initialRating, initialComment, onSubmit, onCancel, submitting }) {
+  const [rating, setRating] = useState(initialRating || 5);
+  const [comment, setComment] = useState(initialComment || '');
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(rating, comment); }} className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-600">Sao:</span>
+        {[1,2,3,4,5].map(n => (
+          <button key={n} type="button" onClick={() => setRating(n)} className="focus:outline-none">
+            <svg className={`w-6 h-6 ${n <= rating ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-200'}`} fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+          </button>
+        ))}
+        <span className="text-sm font-medium text-gray-700">{rating}/5</span>
+      </div>
+      <textarea
+        value={comment}
+        onChange={e => setComment(e.target.value)}
+        rows={2}
+        maxLength={1000}
+        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
+        placeholder="Chia sẻ trải nghiệm của bạn… (tùy chọn)"
+      />
+      <div className="flex gap-2">
+        <button type="submit" disabled={submitting} className="px-4 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-60">
+          {submitting ? 'Đang gửi…' : onCancel ? 'Cập nhật' : 'Gửi đánh giá'}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="px-3 py-1.5 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">Hủy</button>
+        )}
+      </div>
+    </form>
+  );
+}
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -14,6 +159,22 @@ export default function CourseDetailPage() {
   const [enrolling, setEnrolling] = useState(false);
   const [access, setAccess] = useState(null);
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const currentUserId = typeof window !== 'undefined'
+    ? (() => { try { const t = localStorage.getItem('token'); if (!t) return null; const p = JSON.parse(atob(t.split('.')[1])); return p.id; } catch { return null; } })()
+    : null;
+
+  /* ── Bình luận ── */
+  const [comments, setComments] = useState([]);
+  const [commentLoading, setCommentLoading] = useState(true);
+  const [commentText, setCommentText] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  /* ── Đánh giá ── */
+  const [reviewStats, setReviewStats] = useState({ average_rating: 0, review_count: 0 });
+  const [myReview, setMyReview] = useState(null);
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [editReview, setEditReview] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -76,7 +237,123 @@ export default function CourseDetailPage() {
     };
   }, [id, token]);
 
-  const formatPrice = (price) => {
+  /* ── Load bình luận ── */
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setCommentLoading(true);
+    commentService.getComments('course', id, { limit: 50 })
+      .then(res => { if (!cancelled && res?.success) setComments(res.data?.comments ?? []); })
+      .catch(() => { if (!cancelled) setComments([]); })
+      .finally(() => { if (!cancelled) setCommentLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
+
+  /* ── Load đánh giá ── */
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setReviewLoading(true);
+
+    const load = async () => {
+      try {
+        const res = await reviewService.getReviewsByCourse(id);
+        if (cancelled) return;
+        if (res?.success) {
+          setReviewStats(res.data?.stats ?? { average_rating: 0, review_count: 0 });
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) setReviewLoading(false);
+    };
+
+    const loadMy = async () => {
+      if (!token) return;
+      try {
+        const res = await reviewService.getMyReview(id);
+        if (cancelled || !res?.success) return;
+        const mine = (res.data?.reviews ?? []).find(r => String(r.course_id?._id ?? r.course_id) === String(id));
+        if (mine) setMyReview(mine);
+      } catch { /* ignore */ }
+    };
+
+    Promise.all([load(), loadMy()]);
+    return () => { cancelled = true; };
+  }, [id, token]);
+
+  /* ── Xử lý bình luận ── */
+  const handlePostComment = async (e) => {
+    e.preventDefault();
+    if (!token) { toast.error('Vui lòng đăng nhập để bình luận'); navigate('/login'); return; }
+    if (!commentText.trim()) return;
+    setSubmittingComment(true);
+    try {
+      const res = await commentService.postComment({ target_type: 'course', target_id: id, content: commentText.trim() });
+      if (res?.success) {
+        setCommentText('');
+        toast.success('Đã gửi bình luận');
+        const fresh = await commentService.getComments('course', id, { limit: 50 });
+        if (fresh?.success) setComments(fresh.data?.comments ?? []);
+      }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Gửi bình luận thất bại'); }
+    finally { setSubmittingComment(false); }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm('Xóa bình luận này?')) return;
+    try {
+      const res = await commentService.deleteComment(commentId);
+      if (res?.success) {
+        setComments(prev => {
+          const topLevel = prev.filter(c => String(c._id) !== String(commentId));
+          return topLevel.map(c => ({ ...c, replies: c.replies?.filter(r => String(r._id) !== String(commentId)) }));
+        });
+        toast.success('Đã xóa bình luận');
+      }
+    } catch { toast.error('Xóa bình luận thất bại'); }
+  };
+
+  const handleReplySubmit = async (parentId, content) => {
+    if (!token) { toast.error('Vui lòng đăng nhập'); navigate('/login'); return null; }
+    try {
+      const res = await commentService.postComment({ target_type: 'course', target_id: id, content, parent_id: parentId });
+      if (res?.success) {
+        const fresh = await commentService.getComments('course', id, { limit: 50 });
+        if (fresh?.success) setComments(fresh.data?.comments ?? []);
+      }
+      return res;
+    } catch (err) { toast.error(err?.response?.data?.message || 'Gửi trả lời thất bại'); return null; }
+  };
+
+  /* ── Xử lý đánh giá ── */
+  const handleSubmitReview = async (rating, comment) => {
+    if (!token) { toast.error('Vui lòng đăng nhập để đánh giá'); navigate('/login'); return; }
+    setSubmittingReview(true);
+    try {
+      const res = await reviewService.submitReview({ course_id: id, rating, comment });
+      if (res?.success) {
+        setMyReview(res.data?.review ?? null);
+        setEditReview(false);
+        toast.success(myReview ? 'Đã cập nhật đánh giá' : 'Cảm ơn bạn đã đánh giá!');
+        const statsRes = await reviewService.getReviewsByCourse(id);
+        if (statsRes?.success) setReviewStats(statsRes.data?.stats ?? reviewStats);
+      } else { toast.error(res.message || 'Gửi đánh giá thất bại'); }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Gửi đánh giá thất bại'); }
+    finally { setSubmittingReview(false); }
+  };
+
+  const handleDeleteReview = async () => {
+    if (!myReview?._id || !window.confirm('Xóa đánh giá của bạn?')) return;
+    try {
+      const res = await reviewService.deleteReview(myReview._id);
+      if (res?.success) {
+        setMyReview(null);
+        setEditReview(false);
+        toast.success('Đã xóa đánh giá');
+        const statsRes = await reviewService.getReviewsByCourse(id);
+        if (statsRes?.success) setReviewStats(statsRes.data?.stats ?? reviewStats);
+      }
+    } catch { toast.error('Xóa đánh giá thất bại'); }
+  };
     if (price === 0 || price == null) return 'Miễn phí';
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -275,6 +552,108 @@ export default function CourseDetailPage() {
                     </li>
                   );
                 })
+              )}
+            </ul>
+          </section>
+
+          {/* ── Đánh giá ── */}
+          <section className="mt-10 rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900">Đánh giá</h2>
+              <div className="flex items-center gap-3 mt-1">
+                <StarRow rating={reviewStats.average_rating} size="md" />
+                <span className="font-semibold text-gray-900">{Number(reviewStats.average_rating).toFixed(1)}</span>
+                <span className="text-gray-500 text-sm">({reviewStats.review_count} đánh giá)</span>
+              </div>
+            </div>
+            {enrolled ? (
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                {editReview || !myReview ? (
+                  <ReviewForm
+                    initialRating={myReview?.rating || 5}
+                    initialComment={myReview?.comment || ''}
+                    onSubmit={handleSubmitReview}
+                    onCancel={myReview ? () => setEditReview(false) : undefined}
+                    submitting={submittingReview}
+                  />
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold">
+                      {myReview?.user_id?.name?.[0]?.toUpperCase() || 'U'}
+                    </div>
+                    <div className="flex-1">
+                      <StarRow rating={myReview.rating} />
+                      <p className="text-sm text-gray-700 mt-1">{myReview.comment || 'Đã đánh giá.'}</p>
+                      <div className="flex gap-3 mt-2">
+                        <button onClick={() => setEditReview(true)} className="text-xs text-primary-600 hover:underline">Sửa</button>
+                        <button onClick={handleDeleteReview} className="text-xs text-red-500 hover:underline">Xóa</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="px-6 py-3 border-b border-gray-100">
+                <p className="text-sm text-gray-500">Đăng ký khóa học để đánh giá.</p>
+              </div>
+            )}
+            <div className="px-6 py-3">
+              <p className="text-sm font-medium text-gray-500">Danh sách đánh giá</p>
+            </div>
+          </section>
+
+          {/* ── Bình luận ── */}
+          <section className="mt-10 rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900">Bình luận</h2>
+              <p className="text-sm text-gray-500 mt-1">{commentLoading ? '…' : `${comments.length} bình luận`}</p>
+            </div>
+
+            {/* Form bình luận */}
+            <div className="px-6 py-4 border-b border-gray-100">
+              {token ? (
+                <form onSubmit={handlePostComment} className="flex gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold uppercase">
+                    {currentUserId ? (() => { try { const u = JSON.parse(atob(localStorage.getItem('token') || ''.split('.')[1])); return (u.name || u.email || 'U')[0].toUpperCase(); } catch { return 'U'; } })() : 'U'} </div>
+                  <div className="flex-1">
+                    <textarea
+                      value={commentText}
+                      onChange={e => setCommentText(e.target.value)}
+                      rows={2}
+                      maxLength={2000}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
+                      placeholder="Viết bình luận…"
+                    />
+                    <div className="flex justify-end mt-2">
+                      <button type="submit" disabled={submittingComment || !commentText.trim()} className="px-4 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-60">
+                        {submittingComment ? 'Đang gửi…' : 'Gửi bình luận'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  <Link to="/login" className="text-primary-600 hover:underline">Đăng nhập</Link> để bình luận.
+                </p>
+              )}
+            </div>
+
+            {/* Danh sách bình luận */}
+            <ul className="divide-y divide-gray-100 px-6">
+              {commentLoading ? (
+                <li className="py-6 text-center text-gray-400">Đang tải bình luận…</li>
+              ) : comments.length === 0 ? (
+                <li className="py-6 text-center text-gray-500">Chưa có bình luận nào.</li>
+              ) : (
+                comments.map(c => (
+                  <CommentItem
+                    key={c._id}
+                    comment={c}
+                    currentUserId={currentUserId}
+                    onDelete={handleDeleteComment}
+                    onReplySubmit={handleReplySubmit}
+                  />
+                ))
               )}
             </ul>
           </section>

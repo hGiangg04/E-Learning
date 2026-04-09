@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { lessonService, courseService, progressService, quizService } from '../api';
+import { lessonService, courseService, progressService, quizService, commentService } from '../api';
 import { parseYouTubeEmbedUrl } from '../utils/youtubeEmbed';
 
 const BOOKMARK_KEY = 'elearning-lesson-bookmarks';
@@ -139,6 +139,20 @@ export default function LessonLearnPage() {
   const [timeLeft, setTimeLeft] = useState(null);
   const timerRef = useRef(null);
 
+  /* ── Bình luận bài học ── */
+  const [lessonComments, setLessonComments] = useState([]);
+  const [lessonCommentLoading, setLessonCommentLoading] = useState(true);
+  const [lessonCommentText, setLessonCommentText] = useState('');
+  const [submittingLessonComment, setSubmittingLessonComment] = useState(false);
+
+  const currentUserId = useMemo(() => {
+    try {
+      const t = localStorage.getItem('token');
+      if (!t) return null;
+      return JSON.parse(atob(t.split('.')[1])).id;
+    } catch { return null; }
+  }, []);
+
   const videoRef = useRef(null);
   const videoSegmentStartRef = useRef(Date.now());
   const textStudyAccumRef = useRef(0);
@@ -216,6 +230,48 @@ export default function LessonLearnPage() {
   useEffect(() => {
     if (lessonId) syncBookmark(lessonId);
   }, [lessonId, syncBookmark]);
+
+  /* ── Load bình luận bài học ── */
+  useEffect(() => {
+    if (!lessonId) return;
+    let cancelled = false;
+    setLessonCommentLoading(true);
+    commentService.getComments('lesson', lessonId, { limit: 50 })
+      .then(res => { if (!cancelled && res?.success) setLessonComments(res.data?.comments ?? []); })
+      .catch(() => { if (!cancelled) setLessonComments([]); })
+      .finally(() => { if (!cancelled) setLessonCommentLoading(false); });
+    return () => { cancelled = true; };
+  }, [lessonId]);
+
+  /* ── Gửi bình luận bài học ── */
+  const handleLessonComment = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    if (!token) { toast.error('Vui lòng đăng nhập để bình luận'); navigate('/login'); return; }
+    if (!lessonCommentText.trim()) return;
+    setSubmittingLessonComment(true);
+    try {
+      const res = await commentService.postComment({ target_type: 'lesson', target_id: lessonId, content: lessonCommentText.trim() });
+      if (res?.success) {
+        setLessonCommentText('');
+        toast.success('Đã gửi bình luận');
+        const fresh = await commentService.getComments('lesson', lessonId, { limit: 50 });
+        if (fresh?.success) setLessonComments(fresh.data?.comments ?? []);
+      }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Gửi bình luận thất bại'); }
+    finally { setSubmittingLessonComment(false); }
+  };
+
+  const handleDeleteLessonComment = async (commentId) => {
+    if (!window.confirm('Xóa bình luận này?')) return;
+    try {
+      const res = await commentService.deleteComment(commentId);
+      if (res?.success) {
+        setLessonComments(prev => prev.filter(c => String(c._id) !== String(commentId)));
+        toast.success('Đã xóa bình luận');
+      }
+    } catch { toast.error('Xóa bình luận thất bại'); }
+  };
 
   useEffect(() => {
     if (lessonId) {
@@ -1084,6 +1140,79 @@ export default function LessonLearnPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Bình luận bài học ── */}
+      {!showQuiz && (
+        <div className="border-t border-zinc-800 bg-[#0f0f12]">
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-zinc-300">Bình luận bài học</h3>
+              <span className="text-xs text-zinc-500">
+                {lessonCommentLoading ? '…' : `${lessonComments.length} bình luận`}
+              </span>
+            </div>
+
+            {/* Form */}
+            {currentUserId ? (
+              <form onSubmit={handleLessonComment} className="flex gap-3 mb-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-700 text-zinc-300 flex items-center justify-center text-xs font-semibold uppercase">
+                  {(() => { try { const t = localStorage.getItem('token'); if (!t) return '?'; const u = JSON.parse(atob(t.split('.')[1])); return (u.name || u.email || 'U')[0].toUpperCase(); } catch { return 'U'; } })()}
+                </div>
+                <div className="flex-1">
+                  <textarea
+                    value={lessonCommentText}
+                    onChange={e => setLessonCommentText(e.target.value)}
+                    rows={2}
+                    maxLength={2000}
+                    className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 focus:outline-none focus:border-blue-500 resize-none placeholder:text-zinc-500"
+                    placeholder="Viết bình luận về bài học…"
+                  />
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="submit"
+                      disabled={submittingLessonComment || !lessonCommentText.trim()}
+                      className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {submittingLessonComment ? 'Đang gửi…' : 'Gửi bình luận'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <p className="text-sm text-zinc-500 mb-3">
+                <Link to="/login" className="text-blue-400 hover:underline">Đăng nhập</Link> để bình luận.
+              </p>
+            )}
+
+            {/* Danh sách */}
+            <div className="space-y-0 divide-y divide-zinc-800 max-h-72 overflow-y-auto">
+              {lessonCommentLoading ? (
+                <p className="text-sm text-zinc-500 py-4 text-center">Đang tải…</p>
+              ) : lessonComments.length === 0 ? (
+                <p className="text-sm text-zinc-500 py-4 text-center">Chưa có bình luận nào.</p>
+              ) : (
+                lessonComments.map(c => (
+                  <div key={c._id} className="py-3 flex items-start gap-3">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-zinc-700 text-zinc-300 flex items-center justify-center text-xs font-semibold uppercase">
+                      {c.user_id?.name?.[0] || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-medium text-zinc-200">{c.user_id?.name || 'Học viên'}</span>
+                        <span className="text-xs text-zinc-500">{new Date(c.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        {currentUserId && c.user_id?._id === currentUserId && (
+                          <button onClick={() => handleDeleteLessonComment(c._id)} className="text-xs text-red-400 hover:underline ml-1">Xóa</button>
+                        )}
+                      </div>
+                      <p className="text-sm text-zinc-300 whitespace-pre-line">{c.content}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
