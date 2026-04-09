@@ -17,6 +17,7 @@ import CertificatesPage from './pages/CertificatesPage';
 import CertificateDetailPage from './pages/CertificateDetailPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
+import NotFoundPage from './pages/NotFoundPage';
 import './index.css';
 
 // Admin Pages
@@ -52,6 +53,9 @@ function App() {
         <Route path="/certificates/:certNumber" element={<CertificateDetailPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+
+        {/* 404 */}
+        <Route path="*" element={<NotFoundPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={<DashboardPage />} />
