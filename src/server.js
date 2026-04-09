@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
 const path = require('path');
+const http = require('http');
 const connectDB = require('./config/database');
 
 dotenv.config();
@@ -107,6 +108,11 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/cart', cartRoutes);
 
+// Socket.io — khởi tạo sau khi đã require tất cả routes
+const { initSocket } = require('./config/socket');
+const httpServer = http.createServer(app);
+initSocket(httpServer);
+
 // 404 handler
 app.use((req, res) => {
     res.set('X-E-Learning-API', '1');
@@ -122,9 +128,10 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(PORT, LISTEN_HOST, () => {
+httpServer.listen(PORT, LISTEN_HOST, () => {
     console.log(`🚀 Server (pid ${process.pid}) tại http://${LISTEN_HOST}:${PORT}`);
     console.log(`📦 Môi trường: ${process.env.NODE_ENV}`);
+    console.log(`🔌 Socket.io tại http://${LISTEN_HOST}:${PORT}/socket.io`);
     console.log('📍 Giảng viên: GET /api/instructors/:id | /api/courses/instructor/:id');
     console.log('💡 /api/health phải có api_version: 2 — nếu không: đang gọi nhầm process khác trên cổng này');
     console.log('💡 Mở từ xa/LAN: đặt LISTEN_HOST=0.0.0.0 trong .env');

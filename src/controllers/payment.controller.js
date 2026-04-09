@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Payment = require('../models/payment.model');
 const Enrollment = require('../models/enrollment.model');
 const { activateEnrollmentFromPayment } = require('../utils/activateEnrollmentFromPayment');
+const { emitNotification, emitNotificationToAdmin } = require('../utils/socketEmit');
 
 function toUiStatus(dbStatus) {
     if (dbStatus === 'completed') return 'approved';
@@ -92,11 +93,41 @@ const paymentController = {
                 payment.auto_processed = 1;
                 await payment.save();
                 await activateEnrollmentFromPayment(payment);
+
+                // Lấy thông tin để gửi notification
+                const populated = await Payment.findById(payment._id)
+                    .populate('user_id', 'name')
+                    .populate('course_id', 'title');
+
+                // Thông báo cho học sinh
+                if (populated?.user_id && populated?.course_id) {
+                    await emitNotification({
+                        userId: populated.user_id._id.toString(),
+                        type: 'payment',
+                        title: 'Thanh toán đã được duyệt!',
+                        message: `Thanh toán cho khóa học "${populated.course_id.title}" đã được xác nhận. Khóa học đã sẵn sàng!`,
+                        link: '/my-courses'
+                    });
+                }
             } else {
                 payment.status = 'failed';
                 await payment.save();
                 if (payment.enrollment_id) {
                     await Enrollment.findByIdAndDelete(payment.enrollment_id);
+                }
+
+                const populated = await Payment.findById(payment._id)
+                    .populate('user_id', 'name')
+                    .populate('course_id', 'title');
+
+                if (populated?.user_id && populated?.course_id) {
+                    await emitNotification({
+                        userId: populated.user_id._id.toString(),
+                        type: 'payment',
+                        title: 'Thanh toán bị từ chối',
+                        message: `Thanh toán cho khóa học "${populated.course_id.title}" không được duyệt. Vui lòng thử lại hoặc liên hệ hỗ trợ.`,
+                        link: '/cart'
+                    });
                 }
             }
 

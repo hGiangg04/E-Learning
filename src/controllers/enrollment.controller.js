@@ -4,6 +4,7 @@ const Course = require('../models/course.model');
 const Payment = require('../models/payment.model');
 const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
 const { activateEnrollmentFromPayment } = require('../utils/activateEnrollmentFromPayment');
+const { emitNotification } = require('../utils/socketEmit');
 
 function generateOrderCode() {
     return `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -143,6 +144,15 @@ const enrollmentController = {
 
                 await Course.findByIdAndUpdate(course_id, { $inc: { student_count: 1 } });
 
+                // Gửi thông báo real-time cho học sinh
+                await emitNotification({
+                    userId: req.user._id.toString(),
+                    type: 'enrollment',
+                    title: 'Đăng ký thành công!',
+                    message: `Bạn đã được ghi danh khóa học "${course.title}" miễn phí. Hãy bắt đầu học ngay!`,
+                    link: `/lessons/${course._id}`
+                });
+
                 return res.status(201).json({
                     success: true,
                     message: isAdmin && price > 0
@@ -170,6 +180,23 @@ const enrollmentController = {
                 status: 'pending'
             });
             await payment.save();
+
+            // Thông báo cho học sinh cần thanh toán
+            await emitNotification({
+                userId: req.user._id.toString(),
+                type: 'payment',
+                title: 'Chờ thanh toán',
+                message: `Bạn đã đăng ký khóa học "${course.title}" (${price.toLocaleString('vi-VN')}đ). Vui lòng hoàn tất thanh toán để được kích hoạt.`,
+                link: '/cart'
+            });
+
+            // Thông báo cho admin có đơn thanh toán mới
+            await emitNotificationToAdmin({
+                type: 'payment',
+                title: 'Yêu cầu thanh toán mới',
+                message: `Học sinh ${req.user.name} đăng ký khóa học "${course.title}" — cần xác nhận.`,
+                link: '/admin/payments'
+            });
 
             return res.status(201).json({
                 success: true,
@@ -218,10 +245,21 @@ const enrollmentController = {
                 $inc: { student_count: 1 }
             });
 
-            const populated = await Enrollment.findById(enrollment._id).populate(
-                'course_id',
-                'title'
-            );
+            // Lấy thông tin khóa học + user để gửi notification
+            const populated = await Enrollment.findById(enrollment._id)
+                .populate('course_id', 'title')
+                .populate('user_id', 'name');
+
+            // Thông báo cho học sinh
+            if (populated?.user_id && populated?.course_id) {
+                await emitNotification({
+                    userId: populated.user_id._id.toString(),
+                    type: 'enrollment',
+                    title: 'Đăng ký đã được kích hoạt!',
+                    message: `Khóa học "${populated.course_id.title}" đã sẵn sàng. Bạn có thể bắt đầu học ngay!`,
+                    link: `/lessons/${enrollment.course_id}`
+                });
+            }
 
             res.json({
                 success: true,

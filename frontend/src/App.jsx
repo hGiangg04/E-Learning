@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
+import { useEffect } from 'react';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -19,6 +20,7 @@ import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import InstructorProfilePage from './pages/InstructorProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
+import { socketService } from './api/socketService';
 import './index.css';
 
 // Admin Pages
@@ -31,10 +33,67 @@ import EnrollmentManagement from './pages/admin/EnrollmentManagement';
 import PaymentManagement from './pages/admin/PaymentManagement';
 import QuizManagement from './pages/admin/QuizManagement';
 
+// Kết nối Socket khi có token, ngắt khi đăng xuất, hiển thị toast cho notification real-time
+function SocketManager() {
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      socketService.connect(token);
+
+      const off = socketService.onNotification((notif) => {
+        toast.success(notif.title, {
+          duration: 4000,
+          icon: getNotificationIcon(notif.type),
+        });
+        window.dispatchEvent(new Event('notifications-refresh'));
+      });
+      return () => off();
+    }
+  }, []);
+
+  // Lắng nghe sự kiện đăng nhập / đăng xuất để reconnect/disconnect
+  useEffect(() => {
+    const onAuth = () => {
+      const newToken = localStorage.getItem('token');
+      if (newToken) {
+        socketService.connect(newToken);
+        socketService.onNotification((notif) => {
+          toast.success(notif.title, {
+            duration: 4000,
+            icon: getNotificationIcon(notif.type),
+          });
+          window.dispatchEvent(new Event('notifications-refresh'));
+        });
+      } else {
+        socketService.disconnect();
+      }
+    };
+    window.addEventListener('auth-changed', onAuth);
+    return () => window.removeEventListener('auth-changed', onAuth);
+  }, []);
+
+  return null;
+}
+
+function getNotificationIcon(type) {
+  const icons = {
+    enrollment: '📚',
+    payment: '💳',
+    quiz: '📝',
+    course: '🎓',
+    system: '🔔',
+    achievement: '🏆',
+    review: '⭐',
+    certificate: '📜',
+  };
+  return icons[type] || '🔔';
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
+      <SocketManager />
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
