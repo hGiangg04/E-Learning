@@ -37,6 +37,7 @@ const URL = resolveSocketURL();
 let socket = null;
 let notificationHandlers = new Set();
 let globalHandlers = new Set();
+let newAnswerHandlers = new Set();
 
 /**
  * Kết nối Socket.io với token JWT.
@@ -75,6 +76,12 @@ function connect(token) {
       notificationHandlers.forEach((fn) => fn(data));
     });
 
+    // Sự kiện câu trả lời mới cho Q&A
+    socket.on('new_answer', (data) => {
+      console.log('[Socket] New answer received:', data);
+      newAnswerHandlers.forEach((fn) => fn(data));
+    });
+
     // Sự kiện toàn cục (phòng khi mở rộng sau này)
     socket.onAny((event, ...args) => {
       globalHandlers.forEach((fn) => fn(event, args));
@@ -92,6 +99,7 @@ function disconnect() {
   }
   notificationHandlers.clear();
   globalHandlers.clear();
+  newAnswerHandlers.clear();
 }
 
 /**
@@ -111,6 +119,17 @@ function onNotification(handler) {
  */
 function offNotification(handler) {
   notificationHandlers.delete(handler);
+}
+
+/**
+ * Đăng ký handler cho sự kiện 'new_answer'.
+ * Trả về hàm hủy đăng ký.
+ * @param {(data: object) => void} handler
+ * @returns {() => void}
+ */
+function onNewAnswer(handler) {
+  newAnswerHandlers.add(handler);
+  return () => newAnswerHandlers.delete(handler);
 }
 
 /**
@@ -135,6 +154,7 @@ export const socketService = {
   disconnect,
   onNotification,
   offNotification,
+  onNewAnswer,
   onAny,
   isConnected,
 };

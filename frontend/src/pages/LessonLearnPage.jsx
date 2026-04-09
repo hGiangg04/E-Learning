@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } fr
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { lessonService, courseService, progressService, quizService, certificateService } from '../api';
+import QASection from '../components/QASection';
 import { parseYouTubeEmbedUrl } from '../utils/youtubeEmbed';
 
 const BOOKMARK_KEY = 'elearning-lesson-bookmarks';
@@ -1009,6 +1010,13 @@ export default function LessonLearnPage() {
                 <p className="text-sm text-zinc-500">Chưa có nội dung văn bản cho bài này.</p>
               )}
             </section>
+
+            {/* Q&A Section */}
+            <QASection
+              courseId={resolvedCourseMongoId || courseId}
+              lessonId={lessonId}
+              onNewAnswer={true}
+            />
           </div>
         </main>
       </div>
