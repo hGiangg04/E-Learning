@@ -214,6 +214,9 @@ export default function Navbar() {
                   <Link to="/notifications" className="text-sm text-gray-600">
                     Thông báo
                   </Link>
+                  <Link to="/certificates" className="text-sm text-gray-600">
+                    Chứng chỉ
+                  </Link>
                   <Link to="/my-courses" className="text-sm text-gray-600">
                     Khóa học của tôi
                   </Link>

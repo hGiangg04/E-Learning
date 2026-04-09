@@ -13,6 +13,8 @@ import ProfilePage from './pages/ProfilePage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import WishlistPage from './pages/WishlistPage';
 import NotificationsPage from './pages/NotificationsPage';
+import CertificatesPage from './pages/CertificatesPage';
+import CertificateDetailPage from './pages/CertificateDetailPage';
 import './index.css';
 
 // Admin Pages
@@ -44,6 +46,8 @@ function App() {
         <Route path="/my-courses" element={<MyCoursesPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/certificates" element={<CertificatesPage />} />
+        <Route path="/certificates/:certNumber" element={<CertificateDetailPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={<DashboardPage />} />
