@@ -3,6 +3,8 @@ const Lesson = require('../models/lesson.model');
 const LessonProgress = require('../models/lessonProgress.model');
 const CourseProgress = require('../models/courseProgress.model');
 const Enrollment = require('../models/enrollment.model');
+const certificateController = require('./certificate.controller');
+const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
 
 async function syncCourseProgress(userId, courseId) {
     const totalLessons = await Lesson.countDocuments({ course_id: courseId, is_published: 1 });
@@ -65,7 +67,7 @@ const progressController = {
                 course_id: courseId,
                 status: 'active'
             });
-            if (!enroll) {
+            if (!enroll && req.user.role !== 'admin') {
                 return res.status(403).json({
                     success: false,
                     message: 'Bạn cần đăng ký và được kích hoạt khóa học này'
@@ -104,10 +106,26 @@ const progressController = {
                 course_id: courseId
             });
 
+            let certificateIssued = null;
+            if (courseProgress && Number(courseProgress.progress_percentage) >= 100) {
+                const { certificate, newlyIssued } =
+                    await certificateController.tryIssueCertificateForCompletedCourse(req.user._id, courseId);
+                if (certificate) {
+                    certificateIssued = {
+                        certificate_number: certificate.certificate_number,
+                        newly_issued: newlyIssued
+                    };
+                }
+            }
+
             res.json({
                 success: true,
                 message: 'Đã cập nhật tiến độ',
-                data: { lesson_progress: doc, course_progress: courseProgress }
+                data: {
+                    lesson_progress: doc,
+                    course_progress: courseProgress,
+                    ...(certificateIssued ? { certificate_issued: certificateIssued } : {})
+                }
             });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
@@ -117,10 +135,12 @@ const progressController = {
     // GET /api/progress/courses/:courseId/lessons
     getLessonProgressByCourse: async (req, res) => {
         try {
-            const { courseId } = req.params;
-            if (!mongoose.Types.ObjectId.isValid(courseId)) {
-                return res.status(400).json({ success: false, message: 'courseId không hợp lệ' });
+            const { courseId: raw } = req.params;
+            const course = await resolveCourseByParam(raw);
+            if (!course) {
+                return res.status(404).json({ success: false, message: 'Khóa học không tồn tại' });
             }
+            const courseId = course._id;
 
             const rows = await LessonProgress.find({
                 user_id: req.user._id,
@@ -139,10 +159,12 @@ const progressController = {
     // GET /api/progress/courses/:courseId
     getCourseProgress: async (req, res) => {
         try {
-            const { courseId } = req.params;
-            if (!mongoose.Types.ObjectId.isValid(courseId)) {
-                return res.status(400).json({ success: false, message: 'courseId không hợp lệ' });
+            const { courseId: raw } = req.params;
+            const course = await resolveCourseByParam(raw);
+            if (!course) {
+                return res.status(404).json({ success: false, message: 'Khóa học không tồn tại' });
             }
+            const courseId = course._id;
 
             let row = await CourseProgress.findOne({
                 user_id: req.user._id,

@@ -24,6 +24,18 @@ const enrollmentController = {
                 course_id: courseId
             });
 
+            if (req.user.role === 'admin') {
+                return res.json({
+                    success: true,
+                    data: {
+                        enrolled: !!enrollment,
+                        status: enrollment?.status ?? null,
+                        canLearn: true,
+                        adminFullAccess: true
+                    }
+                });
+            }
+
             res.json({
                 success: true,
                 data: {
@@ -92,8 +104,9 @@ const enrollmentController = {
             }
 
             const price = Number(course.price) || 0;
+            const isAdmin = req.user.role === 'admin';
 
-            if (price <= 0) {
+            if (price <= 0 || isAdmin) {
                 const enrollment = new Enrollment({
                     user_id: req.user._id,
                     course_id,
@@ -105,7 +118,9 @@ const enrollmentController = {
 
                 return res.status(201).json({
                     success: true,
-                    message: 'Đăng ký khóa học miễn phí thành công',
+                    message: isAdmin && price > 0
+                        ? 'Admin: đã kích hoạt học khóa học (không cần thanh toán)'
+                        : 'Đăng ký khóa học miễn phí thành công',
                     data: { enrollment, needPayment: false }
                 });
             }

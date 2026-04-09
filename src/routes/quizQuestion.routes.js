@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const quizQuestionController = require('../controllers/quizQuestion.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const { authMiddleware } = require('../middleware/auth.middleware');
 
 // Các route đều cần đăng nhập
 router.use(authMiddleware);

@@ -20,131 +20,13 @@ export default function FeaturedCourses() {
 
   const fetchCourses = async () => {
     try {
-      const response = await courseService.getAll({ limit: 8, sort: '-created_at' });
+      const response = await courseService.getAll({ limit: 8, sort: 'newest' });
       const raw = response.data?.data?.courses || [];
       setCourses(raw.map(normalizeCourse));
     } catch (error) {
       console.error('Lỗi khi tải khóa học:', error);
-      // Demo data
-      setCourses([
-        {
-          _id: 'demo1',
-          title: 'Lập trình React từ cơ bản đến nâng cao',
-          description: 'Khóa học React JS toàn diện giúp bạn xây dựng ứng dụng web hiện đại',
-          thumbnail: '',
-          price: 1500000,
-          discount_price: 990000,
-          duration_hours: 40,
-          level: 'intermediate',
-          average_rating: 4.8,
-          review_count: 1250,
-          student_count: 5420,
-          instructor: { name: 'Nguyễn Văn A' },
-          category: { name: 'Lập trình' }
-        },
-        {
-          _id: 'demo2',
-          title: 'Thiết kế UI/UX cho người mới bắt đầu',
-          description: 'Học cách thiết kế giao diện người dùng đẹp mắt và chuyên nghiệp',
-          thumbnail: '',
-          price: 1200000,
-          discount_price: 0,
-          duration_hours: 28,
-          level: 'beginner',
-          average_rating: 4.9,
-          review_count: 890,
-          student_count: 3210,
-          instructor: { name: 'Trần Thị B' },
-          category: { name: 'Thiết kế' }
-        },
-        {
-          _id: 'demo3',
-          title: 'Python cho Khoa học Dữ liệu',
-          description: 'Phân tích dữ liệu và Machine Learning với Python',
-          thumbnail: '',
-          price: 2000000,
-          discount_price: 1490000,
-          duration_hours: 50,
-          level: 'advanced',
-          average_rating: 4.7,
-          review_count: 756,
-          student_count: 2890,
-          instructor: { name: 'Lê Văn C' },
-          category: { name: 'AI & Data' }
-        },
-        {
-          _id: 'demo4',
-          title: 'Marketing thực chiến A-Z',
-          description: 'Chiến lược marketing online hiệu quả cho doanh nghiệp',
-          thumbnail: '',
-          price: 1800000,
-          duration_hours: 35,
-          level: 'beginner',
-          average_rating: 4.6,
-          review_count: 543,
-          student_count: 4120,
-          instructor: { name: 'Phạm Thị D' },
-          category: { name: 'Marketing' }
-        },
-        {
-          _id: 'demo5',
-          title: 'Node.js Backend Development',
-          description: 'Xây dựng API và server-side applications với Node.js',
-          thumbnail: '',
-          price: 1600000,
-          discount_price: 1190000,
-          duration_hours: 38,
-          level: 'intermediate',
-          average_rating: 4.8,
-          review_count: 678,
-          student_count: 2340,
-          instructor: { name: 'Hoàng Văn E' },
-          category: { name: 'Lập trình' }
-        },
-        {
-          _id: 'demo6',
-          title: 'Tiếng Anh giao tiếp cơ bản',
-          description: 'Cải thiện kỹ năng tiếng Anh giao tiếp trong 30 ngày',
-          thumbnail: '',
-          price: 0,
-          duration_hours: 20,
-          level: 'beginner',
-          average_rating: 4.5,
-          review_count: 2100,
-          student_count: 8900,
-          instructor: { name: 'Emily Smith' },
-          category: { name: 'Ngoại ngữ' }
-        },
-        {
-          _id: 'demo7',
-          title: 'Figma Master - Thiết kế UI/UX chuyên nghiệp',
-          description: 'Thành thạo Figma từ cơ bản đến portfolio hoàn chỉnh',
-          thumbnail: '',
-          price: 1400000,
-          duration_hours: 32,
-          level: 'intermediate',
-          average_rating: 4.9,
-          review_count: 432,
-          student_count: 1780,
-          instructor: { name: 'Ngô Văn F' },
-          category: { name: 'Thiết kế' }
-        },
-        {
-          _id: 'demo8',
-          title: 'Docker & Kubernetes cơ bản',
-          description: 'Triển khai ứng dụng container hóa chuyên nghiệp',
-          thumbnail: '',
-          price: 1900000,
-          discount_price: 1590000,
-          duration_hours: 42,
-          level: 'advanced',
-          average_rating: 4.7,
-          review_count: 321,
-          student_count: 1560,
-          instructor: { name: 'Đặng Văn G' },
-          category: { name: 'Lập trình' }
-        }
-      ]);
+      // Không dùng dữ liệu demo giả (_id demo1, …) — link tới /courses/demo1 sẽ lỗi vì không có trong DB
+      setCourses([]);
     } finally {
       setLoading(false);
     }
@@ -218,6 +100,10 @@ export default function FeaturedCourses() {
               </div>
             ))}
           </div>
+        ) : getSortedCourses().length === 0 ? (
+          <p className="text-center text-gray-600 py-8">
+            Chưa có khóa học nổi bật. Hãy bật xuất bản khóa học trong admin và đảm bảo backend đang chạy.
+          </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {getSortedCourses().map((course) => (

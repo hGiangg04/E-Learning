@@ -49,10 +49,17 @@ api.interceptors.response.use(
         url.includes('/auth/google') ||
         url.includes('/auth/forgot-password') ||
         url.includes('/auth/reset-password');
-      if (!isAuthAttempt) {
+      const token = localStorage.getItem('token');
+      const currentPath = window.location.pathname;
+
+      // Chỉ xóa token và chuyển hướng khi:
+      // 1. Có token (đã đăng nhập) nhưng API trả 401 (token hết hạn / không hợp lệ)
+      // 2. Không phải request đăng nhập/đăng ký (tránh vòng lặp)
+      if (token && !isAuthAttempt) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        if (!window.location.pathname.startsWith('/login')) {
+        // Chỉ chuyển hướng khi không ở trang login
+        if (!currentPath.startsWith('/login') && !currentPath.startsWith('/register')) {
           window.location.href = '/login';
         }
       }

@@ -103,8 +103,15 @@ const courseController = {
                 ];
             }
 
-            // Lọc theo khoảng giá (dùng discount_price nếu có giảm giá, không thì dùng price)
-            if (min_price !== undefined || max_price !== undefined) {
+            // Lọc theo khoảng giá — chỉ khi có giá trị số thật (tránh $expr khi query rỗng gây lọc sai)
+            const minPNum = min_price !== undefined && min_price !== '' ? Number(min_price) : null;
+            const maxPNum = max_price !== undefined && max_price !== '' ? Number(max_price) : null;
+            const usePriceFilter =
+                (minPNum !== null && !Number.isNaN(minPNum)) || (maxPNum !== null && !Number.isNaN(maxPNum));
+
+            if (usePriceFilter) {
+                const minVal = minPNum !== null && !Number.isNaN(minPNum) ? minPNum : 0;
+                const maxVal = maxPNum !== null && !Number.isNaN(maxPNum) ? maxPNum : 999999999;
                 query.$expr = {
                     $let: {
                         vars: {
@@ -128,8 +135,8 @@ const courseController = {
                         },
                         in: {
                             $and: [
-                                { $gte: ['$$effectivePrice', Number(min_price) || 0] },
-                                { $lte: ['$$effectivePrice', Number(max_price) || 999999999] }
+                                { $gte: ['$$effectivePrice', minVal] },
+                                { $lte: ['$$effectivePrice', maxVal] }
                             ]
                         }
                     }
@@ -246,12 +253,29 @@ const courseController = {
         }
     },
 
-    // GET /api/courses/:id
+    // GET /api/courses/:id — hỗ trợ MongoDB ObjectId hoặc slug (vd: /courses/demo1)
     getCourseById: async (req, res) => {
         try {
-            const course = await Course.findById(req.params.id)
-                .populate('category_id', 'name description')
-                .populate('instructor_id', 'name avatar bio');
+            const param = String(req.params.id || '').trim();
+            if (!param) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Khóa học không tồn tại'
+                });
+            }
+
+            const isOid = /^[a-fA-F0-9]{24}$/.test(param);
+            let course = null;
+            if (isOid) {
+                course = await Course.findById(param)
+                    .populate('category_id', 'name description')
+                    .populate('instructor_id', 'name avatar bio');
+            }
+            if (!course) {
+                course = await Course.findOne({ slug: param })
+                    .populate('category_id', 'name description')
+                    .populate('instructor_id', 'name avatar bio');
+            }
 
             if (!course) {
                 return res.status(404).json({

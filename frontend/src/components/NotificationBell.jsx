@@ -39,9 +39,14 @@ export default function NotificationBell() {
 
     useEffect(() => {
         loadNotifications();
+        const onRefresh = () => loadNotifications();
+        window.addEventListener('notifications-refresh', onRefresh);
         // Poll mỗi 60s
         const interval = setInterval(loadNotifications, 60000);
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('notifications-refresh', onRefresh);
+        };
     }, [loadNotifications]);
 
     const handleMarkAsRead = async (e, id) => {

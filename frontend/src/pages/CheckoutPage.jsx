@@ -44,6 +44,7 @@ export default function CheckoutPage() {
             const res = await cartService.checkout(selectedMethod);
             if (res.success) {
                 toast.success('Đã tạo đơn hàng! Vui lòng thanh toán theo hướng dẫn.');
+                window.dispatchEvent(new Event('cart-changed'));
                 // Chuyển đến trang thông báo thanh toán hoặc lịch sử
                 setTimeout(() => navigate('/my-courses'), 2000);
             }

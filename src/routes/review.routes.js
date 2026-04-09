@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const reviewController = require('../controllers/review.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const { authMiddleware } = require('../middleware/auth.middleware');
 
 // Lấy reviews theo khóa học (public)
 router.get('/course/:course_id', reviewController.getReviewsByCourse);

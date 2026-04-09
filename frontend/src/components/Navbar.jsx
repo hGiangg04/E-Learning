@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import NotificationBell from './NotificationBell';
+import { cartService } from '../api/cartService';
 
 const BookIcon = () => (
   <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -26,13 +27,36 @@ const UserIcon = () => (
   </svg>
 );
 
+const CartNavIcon = () => (
+  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+  </svg>
+);
+
+
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const refreshCartCount = useCallback(async () => {
+    if (!localStorage.getItem('token')) {
+      setCartCount(0);
+      return;
+    }
+    try {
+      const res = await cartService.getMyCart();
+      if (res.success) {
+        setCartCount(res.data?.items?.length ?? 0);
+      }
+    } catch {
+      setCartCount(0);
+    }
+  }, []);
 
   useEffect(() => {
     const syncUser = () => {
@@ -43,6 +67,16 @@ export default function Navbar() {
     window.addEventListener('auth-changed', syncUser);
     return () => window.removeEventListener('auth-changed', syncUser);
   }, [location.pathname]);
+
+  useEffect(() => {
+    refreshCartCount();
+  }, [location.pathname, user, refreshCartCount]);
+
+  useEffect(() => {
+    const onCart = () => refreshCartCount();
+    window.addEventListener('cart-changed', onCart);
+    return () => window.removeEventListener('cart-changed', onCart);
+  }, [refreshCartCount]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -67,7 +101,8 @@ export default function Navbar() {
   const navLinks = [
     { label: 'Trang chủ', href: '/' },
     { label: 'Khóa học', href: '/courses' },
-    { label: 'Về chúng tôi', href: '/about' },
+    { label: 'Yêu thích', href: '/wishlist' },
+    { label: 'Chứng chỉ', href: '/certificates' },
   ];
 
   return (
@@ -109,6 +144,19 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-2">
+                <Link
+                  to="/cart"
+                  className="relative p-2 rounded-full text-gray-600 hover:bg-gray-100 hover:text-primary-600 transition-colors"
+                  title="Giỏ hàng"
+                  aria-label="Giỏ hàng"
+                >
+                  <CartNavIcon />
+                  {cartCount > 0 && (
+                    <span className="absolute top-0 right-0 min-w-[1.125rem] h-[1.125rem] px-0.5 flex items-center justify-center text-[10px] font-bold text-white bg-primary-600 rounded-full">
+                      {cartCount > 99 ? '99+' : cartCount}
+                    </span>
+                  )}
+                </Link>
                 <NotificationBell />
                 <div className="relative">
                 <button
@@ -131,17 +179,27 @@ export default function Navbar() {
                     >
                       Hồ sơ
                     </Link>
-                    <Link
-                      to="/wishlist"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      Yêu thích
-                    </Link>
+                    {user?.role === 'admin' && (
+                      <Link
+                        to="/admin"
+                        className="block px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50"
+                        onClick={() => setIsUserMenuOpen(false)}
+                      >
+                        Quản trị
+                      </Link>
+                    )}
                     <Link
                       to="/my-courses"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >
                       Khóa học của tôi
+                    </Link>
+                    <Link
+                      to="/cart"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      Giỏ hàng{cartCount > 0 ? ` (${cartCount})` : ''}
                     </Link>
                     <hr className="my-2" />
                     <button
@@ -152,6 +210,7 @@ export default function Navbar() {
                     </button>
                   </div>
                 )}
+                </div>
               </div>
             ) : (
               <>
@@ -168,13 +227,29 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 text-gray-600 hover:text-primary-600"
-          >
-            {isMobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
-          </button>
+          <div className="flex items-center gap-1 md:hidden">
+            {user && (
+              <Link
+                to="/cart"
+                className="relative p-2 text-gray-600 hover:text-primary-600"
+                title="Giỏ hàng"
+                aria-label="Giỏ hàng"
+              >
+                <CartNavIcon />
+                {cartCount > 0 && (
+                  <span className="absolute top-0 right-0 min-w-[1.125rem] h-[1.125rem] px-0.5 flex items-center justify-center text-[10px] font-bold text-white bg-primary-600 rounded-full">
+                    {cartCount > 99 ? '99+' : cartCount}
+                  </span>
+                )}
+              </Link>
+            )}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 text-gray-600 hover:text-primary-600"
+            >
+              {isMobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -208,9 +283,11 @@ export default function Navbar() {
                   <Link to="/profile" className="text-sm text-gray-600">
                     Hồ sơ
                   </Link>
-                  <Link to="/wishlist" className="text-sm text-gray-600">
-                    Yêu thích
-                  </Link>
+                  {user?.role === 'admin' && (
+                    <Link to="/admin" className="text-sm font-medium text-primary-600">
+                      Quản trị
+                    </Link>
+                  )}
                   <Link to="/notifications" className="text-sm text-gray-600">
                     Thông báo
                   </Link>

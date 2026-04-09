@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { lessonService, courseService, progressService, quizService } from '../api';
+import { lessonService, courseService, progressService, quizService, certificateService } from '../api';
 import { parseYouTubeEmbedUrl } from '../utils/youtubeEmbed';
 
 const BOOKMARK_KEY = 'elearning-lesson-bookmarks';
@@ -134,10 +134,15 @@ export default function LessonLearnPage() {
   const [quizData, setQuizData] = useState(null);
   const [quizAttempt, setQuizAttempt] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizTextAnswers, setQuizTextAnswers] = useState({});
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [quizResult, setQuizResult] = useState(null);
   const [timeLeft, setTimeLeft] = useState(null);
   const timerRef = useRef(null);
+  /** Chứng chỉ khóa học hiện tại (sau khi hoàn thành 100%) */
+  const [courseCertificate, setCourseCertificate] = useState(null);
+  /** MongoDB ObjectId thật của khóa học (URL có thể là slug — không dùng courseId từ params để so khớp chứng chỉ) */
+  const [resolvedCourseMongoId, setResolvedCourseMongoId] = useState(null);
 
   const videoRef = useRef(null);
   const videoSegmentStartRef = useRef(Date.now());
@@ -201,6 +206,14 @@ export default function LessonLearnPage() {
           setLessonProgressById((prev) => ({ ...prev, [String(lp.lesson_id || lessonId)]: lp }));
           if (res.data.course_progress) setCourseProgress(res.data.course_progress);
           if (Number(lp.is_completed) === 1) setIsCompleted(true);
+          const issued = res.data?.certificate_issued;
+          if (issued?.certificate_number) {
+            setCourseCertificate({ certificate_number: issued.certificate_number });
+            if (issued.newly_issued) {
+              toast.success('Chúc mừng! Bạn đã nhận chứng chỉ khóa học.');
+              window.dispatchEvent(new Event('notifications-refresh'));
+            }
+          }
         }
       } catch (err) {
         const st = err?.response?.status;
@@ -235,6 +248,7 @@ export default function LessonLearnPage() {
     const load = async () => {
       setLoading(true);
       setError(null);
+      setResolvedCourseMongoId(null);
       try {
         const [lessonRes, listRes, courseRes] = await Promise.all([
           lessonService.getLesson(lessonId),
@@ -244,6 +258,13 @@ export default function LessonLearnPage() {
 
         const c = courseRes?.data?.data?.course;
         if (c?.title) setCourseTitle(c.title);
+        if (c?._id) {
+          setResolvedCourseMongoId(String(c._id));
+        } else if (lessonRes.success && lessonRes.data?.lesson) {
+          const lc = lessonRes.data.lesson.course_id;
+          const oid = lc?._id ?? lc;
+          if (oid) setResolvedCourseMongoId(String(oid));
+        }
 
         if (lessonRes.success && lessonRes.data?.lesson) {
           setLesson(lessonRes.data.lesson);
@@ -286,6 +307,44 @@ export default function LessonLearnPage() {
 
     if (courseId && lessonId) load();
   }, [courseId, lessonId, navigate]);
+
+  /** Khóa học đã 100%: tải hoặc bổ sung chứng chỉ (người dùng cũ trước khi sửa backend) */
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const oid = resolvedCourseMongoId || null;
+    if (!oid || !token) return;
+    const pct = Math.min(100, Math.round(Number(courseProgress?.progress_percentage) || 0));
+    if (pct < 100) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await certificateService.getMyCertificates();
+        if (cancelled || !res?.success) return;
+        const list = res.data?.certificates || [];
+        const match = list.find((c) => String(c.course_id?._id || c.course_id) === String(oid));
+        if (match?.certificate_number) {
+          setCourseCertificate({ certificate_number: match.certificate_number });
+          return;
+        }
+        const issueRes = await certificateService.checkAndIssue(oid);
+        if (cancelled || !issueRes?.success) return;
+        const cert = issueRes.data?.certificate;
+        if (cert?.certificate_number) {
+          setCourseCertificate({ certificate_number: cert.certificate_number });
+          if (issueRes.data?.newly_issued) {
+            toast.success('Chúc mừng! Bạn đã nhận chứng chỉ khóa học.');
+            window.dispatchEvent(new Event('notifications-refresh'));
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedCourseMongoId, courseProgress?.progress_percentage]);
 
   useEffect(() => {
     textStudyAccumRef.current = 0;
@@ -397,7 +456,16 @@ export default function LessonLearnPage() {
           setLessonProgressById((prev) => ({ ...prev, [String(lp.lesson_id || lessonId)]: lp }));
         }
         if (res.data?.course_progress) setCourseProgress(res.data.course_progress);
-        toast.success('Bạn đã hoàn thành bài học này!');
+        const issued = res.data?.certificate_issued;
+        if (issued?.certificate_number) {
+          setCourseCertificate({ certificate_number: issued.certificate_number });
+        }
+        if (issued?.newly_issued) {
+          toast.success('Chúc mừng! Bạn đã hoàn thành khóa học và nhận chứng chỉ.');
+          window.dispatchEvent(new Event('notifications-refresh'));
+        } else {
+          toast.success('Bạn đã hoàn thành bài học này!');
+        }
       }
     } catch (err) {
       const msg = err?.response?.data?.message;
@@ -410,8 +478,11 @@ export default function LessonLearnPage() {
     setQuizLoading(true);
     try {
       const res = await quizService.getQuizByLesson(lessonId);
-      if (res?.data?.quiz) {
-        setQuiz(res.data.quiz);
+      const inner = res?.data?.data ?? res?.data;
+      if (inner?.quiz) {
+        setQuiz(inner.quiz);
+      } else {
+        setQuiz(null);
       }
     } catch {
       // không có quiz thì thôi
@@ -431,12 +502,14 @@ export default function LessonLearnPage() {
     setShowQuiz(true);
     setQuizResult(null);
     setQuizAnswers({});
+    setQuizTextAnswers({});
     try {
       const res = await quizService.getQuizForTake(quiz.id);
-      if (res?.data) {
-        setQuizData(res.data);
-        if (res.data.quiz?.time_limit > 0) {
-          setTimeLeft(res.data.quiz.time_limit * 60);
+      const inner = res?.data?.data ?? res?.data;
+      if (inner?.quiz) {
+        setQuizData(inner);
+        if (inner.quiz?.time_limit > 0) {
+          setTimeLeft(inner.quiz.time_limit * 60);
           timerRef.current = setInterval(() => {
             setTimeLeft((t) => {
               if (t <= 1) {
@@ -450,8 +523,9 @@ export default function LessonLearnPage() {
         }
       }
       const startRes = await quizService.startQuiz(quiz.id);
-      if (startRes?.data?.attempt_id) {
-        setQuizAttempt({ id: startRes.data.attempt_id, number: startRes.data.attempt_number });
+      const startInner = startRes?.data?.data ?? startRes?.data;
+      if (startInner?.attempt_id) {
+        setQuizAttempt({ id: startInner.attempt_id, number: startInner.attempt_number });
       }
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Không thể bắt đầu bài kiểm tra');
@@ -461,6 +535,10 @@ export default function LessonLearnPage() {
 
   const handleSelectAnswer = (questionId, optionId) => {
     setQuizAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+  };
+
+  const handleTextAnswerChange = (questionId, text) => {
+    setQuizTextAnswers((prev) => ({ ...prev, [questionId]: text }));
   };
 
   const handleSubmitQuiz = async (autoSubmit = false) => {
@@ -473,13 +551,26 @@ export default function LessonLearnPage() {
       ? (quizData.quiz.time_limit * 60) - (timeLeft || 0)
       : 0;
     try {
-      const answers = Object.entries(quizAnswers).map(([question_id, option_id]) => ({
-        question_id,
-        option_id,
-      }));
+      const list = quizData?.questions || [];
+      const answers = list.map((q) => {
+        const qid = q.id || q._id;
+        if (q.question_type === 'short_answer') {
+          return {
+            question_id: qid,
+            answer_text: (quizTextAnswers[qid] || '').trim(),
+            option_id: null,
+          };
+        }
+        return {
+          question_id: qid,
+          option_id: quizAnswers[qid] || null,
+          answer_text: '',
+        };
+      });
       const res = await quizService.submitQuiz(quizAttempt.id, { answers, time_spent: timeSpent });
-      if (res?.data) {
-        setQuizResult(res.data.attempt);
+      const submitInner = res?.data?.data ?? res?.data;
+      if (submitInner?.attempt) {
+        setQuizResult(submitInner.attempt);
         toast.success(autoSubmit ? 'Hết giờ! Bài đã được nộp tự động.' : 'Đã nộp bài!');
       }
     } catch (err) {
@@ -495,6 +586,7 @@ export default function LessonLearnPage() {
     setQuizData(null);
     setQuizAttempt(null);
     setQuizAnswers({});
+    setQuizTextAnswers({});
     setQuizResult(null);
     setTimeLeft(null);
   };
@@ -730,6 +822,32 @@ export default function LessonLearnPage() {
               </div>
             ) : null}
 
+            {courseCertificate?.certificate_number &&
+              Math.min(100, Math.round(Number(courseProgress?.progress_percentage) || 0)) >= 100 && (
+                <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                  <p className="font-medium text-amber-50 mb-2">
+                    Bạn đã hoàn thành khóa học — chứng chỉ đã được cấp.
+                  </p>
+                  <p className="text-amber-200/90 text-xs mb-3">
+                    Xem chi tiết chứng chỉ hoặc kiểm tra thông báo (biểu tượng chuông) để biết thêm.
+                  </p>
+                  <Link
+                    to={`/certificates/${encodeURIComponent(courseCertificate.certificate_number)}`}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-900 font-medium text-sm transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+                      />
+                    </svg>
+                    Xem chứng chỉ
+                  </Link>
+                </div>
+              )}
+
             {/* Bookmark */}
             <button
               type="button"
@@ -956,11 +1074,41 @@ export default function LessonLearnPage() {
                   <div className="mt-6 space-y-4">
                     <h4 className="text-lg font-semibold text-white">Đáp án</h4>
                     {quizData.questions?.map((q, idx) => {
-                      const selectedOptionId = quizAnswers[q.id];
+                      const qid = q.id || q._id;
+                      if (q.question_type === 'short_answer') {
+                        const text = (quizTextAnswers[qid] || '').trim();
+                        return (
+                          <div
+                            key={qid}
+                            className={`p-4 rounded-xl border ${text ? 'border-emerald-600 bg-emerald-900/20' : 'border-amber-600 bg-amber-900/10'}`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <span
+                                className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                                  text ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
+                                }`}
+                              >
+                                {idx + 1}
+                              </span>
+                              <div className="flex-1">
+                                <p className="text-zinc-100 font-medium">{q.question_text}</p>
+                                <p className="mt-2 text-sm text-zinc-300 whitespace-pre-wrap">
+                                  <span className="text-zinc-500">Bạn trả lời: </span>
+                                  {text || '(chưa nhập)'}
+                                </p>
+                                {q.explanation ? (
+                                  <p className="mt-3 text-sm text-zinc-400 italic">Gợi ý: {q.explanation}</p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      const selectedOptionId = quizAnswers[qid];
                       const correctOption = q.options?.find((o) => o.is_correct);
                       const isCorrect = selectedOptionId === correctOption?.id;
                       return (
-                        <div key={q.id} className={`p-4 rounded-xl border ${isCorrect ? 'border-emerald-600 bg-emerald-900/20' : 'border-red-600 bg-red-900/20'}`}>
+                        <div key={qid} className={`p-4 rounded-xl border ${isCorrect ? 'border-emerald-600 bg-emerald-900/20' : 'border-red-600 bg-red-900/20'}`}>
                           <div className="flex items-start gap-3">
                             <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${isCorrect ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
                               {idx + 1}
@@ -978,8 +1126,8 @@ export default function LessonLearnPage() {
                                         isCorrectOpt
                                           ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500'
                                           : isSelected
-                                          ? 'bg-red-600/30 text-red-300 border border-red-500'
-                                          : 'bg-zinc-800/50 text-zinc-400'
+                                            ? 'bg-red-600/30 text-red-300 border border-red-500'
+                                            : 'bg-zinc-800/50 text-zinc-400'
                                       }`}
                                     >
                                       {opt.option_text}
@@ -1014,44 +1162,68 @@ export default function LessonLearnPage() {
               /* Quiz Questions */
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="space-y-6">
-                  {quizData.questions?.map((q, idx) => (
-                    <div key={q.id} className="p-5 rounded-xl bg-zinc-800/50 border border-zinc-700">
-                      <div className="flex items-start gap-3 mb-4">
-                        <span className="shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
-                          {idx + 1}
-                        </span>
-                        <p className="text-zinc-100 font-medium text-lg leading-relaxed">{q.question_text}</p>
+                  {quizData.questions?.map((q, idx) => {
+                    const qid = q.id || q._id;
+                    if (q.question_type === 'short_answer') {
+                      return (
+                        <div key={qid} className="p-5 rounded-xl bg-zinc-800/50 border border-zinc-700">
+                          <div className="flex items-start gap-3 mb-4">
+                            <span className="shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
+                              {idx + 1}
+                            </span>
+                            <p className="text-zinc-100 font-medium text-lg leading-relaxed">{q.question_text}</p>
+                          </div>
+                          <div className="ml-11">
+                            <textarea
+                              value={quizTextAnswers[qid] || ''}
+                              onChange={(e) => handleTextAnswerChange(qid, e.target.value)}
+                              rows={5}
+                              className="w-full rounded-lg bg-zinc-900 border border-zinc-600 px-4 py-3 text-zinc-100 placeholder:text-zinc-500 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none resize-y min-h-[120px]"
+                              placeholder="Nhập câu trả lời của bạn…"
+                            />
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={qid} className="p-5 rounded-xl bg-zinc-800/50 border border-zinc-700">
+                        <div className="flex items-start gap-3 mb-4">
+                          <span className="shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
+                            {idx + 1}
+                          </span>
+                          <p className="text-zinc-100 font-medium text-lg leading-relaxed">{q.question_text}</p>
+                        </div>
+                        <div className="space-y-3 ml-11">
+                          {q.options?.map((opt) => {
+                            const isSelected = quizAnswers[qid] === opt.id;
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => handleSelectAnswer(qid, opt.id)}
+                                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                                  isSelected
+                                    ? 'border-purple-500 bg-purple-500/20 text-white'
+                                    : 'border-zinc-600 bg-zinc-800/50 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-700/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span
+                                    className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                      isSelected ? 'border-purple-500 bg-purple-500' : 'border-zinc-500'
+                                    }`}
+                                  >
+                                    {isSelected && <span className="w-2.5 h-2.5 rounded-full bg-white" />}
+                                  </span>
+                                  <span>{opt.option_text}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div className="space-y-3 ml-11">
-                        {q.options?.map((opt) => {
-                          const isSelected = quizAnswers[q.id] === opt.id;
-                          return (
-                            <button
-                              key={opt.id}
-                              type="button"
-                              onClick={() => handleSelectAnswer(q.id, opt.id)}
-                              className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                                isSelected
-                                  ? 'border-purple-500 bg-purple-500/20 text-white'
-                                  : 'border-zinc-600 bg-zinc-800/50 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-700/50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                                  isSelected ? 'border-purple-500 bg-purple-500' : 'border-zinc-500'
-                                }`}>
-                                  {isSelected && (
-                                    <span className="w-2.5 h-2.5 rounded-full bg-white" />
-                                  )}
-                                </span>
-                                <span>{opt.option_text}</span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1060,7 +1232,14 @@ export default function LessonLearnPage() {
             {!quizResult && (
               <div className="px-6 py-4 border-t border-zinc-700 bg-[#16162a] flex justify-between items-center">
                 <p className="text-sm text-zinc-400">
-                  {Object.keys(quizAnswers).length}/{quizData.questions?.length || 0} câu đã trả lời
+                  {(quizData.questions || []).filter((q) => {
+                    const qid = q.id || q._id;
+                    if (q.question_type === 'short_answer') {
+                      return (quizTextAnswers[qid] || '').trim().length > 0;
+                    }
+                    return !!quizAnswers[qid];
+                  }).length}
+                  /{quizData.questions?.length || 0} câu đã trả lời
                 </p>
                 <button
                   type="button"

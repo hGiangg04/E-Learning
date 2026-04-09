@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Lesson = require('../models/lesson.model');
 const Course = require('../models/course.model');
 const Enrollment = require('../models/enrollment.model');
+const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
 
 /**
  * Lấy collection native (bypass Mongoose schema) để đọc/ghi trực tiếp.
@@ -54,15 +55,16 @@ const lessonController = {
     // GET /api/lessons/admin/course/:courseId — admin: đủ trường (có content) để sửa form
     listLessonsForAdmin: async (req, res) => {
         try {
-            const { courseId } = req.params;
-            if (!mongoose.Types.ObjectId.isValid(courseId)) {
-                return res.status(400).json({
+            const { courseId: raw } = req.params;
+            const course = await resolveCourseByParam(raw);
+            if (!course) {
+                return res.status(404).json({
                     success: false,
-                    message: 'courseId không hợp lệ'
+                    message: 'Khóa học không tồn tại'
                 });
             }
 
-            const lessons = await Lesson.find({ course_id: courseId }).sort({ position: 1 });
+            const lessons = await Lesson.find({ course_id: course._id }).sort({ position: 1 });
 
             res.json({
                 success: true,
@@ -81,17 +83,18 @@ const lessonController = {
     // không có admin → chỉ trả list ngắn gọn (không content/objectives), chỉ bài published
     getLessonsByCourse: async (req, res) => {
         try {
-            if (!mongoose.Types.ObjectId.isValid(req.params.courseId)) {
-                return res.status(400).json({
+            const course = await resolveCourseByParam(req.params.courseId);
+            if (!course) {
+                return res.status(404).json({
                     success: false,
-                    message: 'courseId không hợp lệ'
+                    message: 'Khóa học không tồn tại'
                 });
             }
 
             const isAdmin = req.query.admin === '1';
             console.log('[GET /lessons/course/' + req.params.courseId + '] isAdmin=', isAdmin);
 
-            let query = { course_id: req.params.courseId };
+            let query = { course_id: course._id };
             if (!isAdmin) {
                 query.is_published = 1;
             }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { useState, useEffect } from 'react';
 import PageLayout from '../components/PageLayout';
 import ReviewsSection from '../components/ReviewsSection';
 import { courseService, enrollmentService, lessonService, wishlistService, cartService } from '../api';
@@ -20,6 +19,13 @@ export default function CourseDetailPage() {
   const [inCart, setInCart] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const viewer =
+    typeof window !== 'undefined' && localStorage.getItem('user')
+      ? JSON.parse(localStorage.getItem('user'))
+      : null;
+  const isAdmin = viewer?.role === 'admin';
+  /** MongoDB _id — API bài học/ghi danh chỉ nhận ObjectId, không dùng slug từ URL */
+  const courseId = course?._id ? String(course._id) : null;
 
   useEffect(() => {
     const load = async () => {
@@ -39,12 +45,15 @@ export default function CourseDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!courseId) {
+      setLessons([]);
+      return;
+    }
     let cancelled = false;
     const loadLessons = async () => {
       setLessonsLoading(true);
       try {
-        const res = await lessonService.getLessonsByCourse(id);
+        const res = await lessonService.getLessonsByCourse(courseId);
         if (!cancelled && res?.success && res.data?.lessons) {
           setLessons(res.data.lessons);
         } else if (!cancelled) {
@@ -60,16 +69,16 @@ export default function CourseDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [courseId]);
 
   useEffect(() => {
-    if (!id || !token) {
+    if (!courseId || !token) {
       setAccess(null);
       return;
     }
     let cancelled = false;
     enrollmentService
-      .checkAccess(id)
+      .checkAccess(courseId)
       .then((res) => {
         if (cancelled || !res.data?.success) return;
         setAccess(res.data.data);
@@ -80,36 +89,34 @@ export default function CourseDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, token]);
+  }, [courseId, token]);
 
-  // Kiểm tra wishlist
   useEffect(() => {
-    if (!id || !token) {
+    if (!courseId || !token) {
       setInWishlist(false);
       return;
     }
-    wishlistService.checkWishlist(id)
+    wishlistService.checkWishlist(courseId)
       .then(res => {
         if (res.success) setInWishlist(res.data?.in_wishlist);
       })
       .catch(() => setInWishlist(false));
-  }, [id, token]);
+  }, [courseId, token]);
 
-  // Kiểm tra cart
   useEffect(() => {
-    if (!id || !token) {
+    if (!courseId || !token) {
       setInCart(false);
       return;
     }
     cartService.getMyCart()
       .then(res => {
         if (res.success) {
-          const hasItem = res.data?.items?.some(item => String(item.course._id) === String(id));
+          const hasItem = res.data?.items?.some(item => String(item.course._id) === String(courseId));
           setInCart(!!hasItem);
         }
       })
       .catch(() => setInCart(false));
-  }, [id, token]);
+  }, [courseId, token]);
 
   const formatPrice = (price) => {
     if (price === 0 || price == null) return 'Miễn phí';
@@ -126,12 +133,13 @@ export default function CourseDetailPage() {
       navigate('/login', { state: { from: { pathname: `/courses/${id}` } } });
       return;
     }
+    if (!courseId) return;
     setEnrolling(true);
     try {
-      const res = await enrollmentService.enroll(id);
+      const res = await enrollmentService.enroll(courseId);
       toast.success(res.data?.message || 'Ghi danh thành công');
       try {
-        const check = await enrollmentService.checkAccess(id);
+        const check = await enrollmentService.checkAccess(courseId);
         if (check.data?.success) setAccess(check.data.data);
       } catch {
         setAccess({ enrolled: true, status: 'pending', canLearn: false });
@@ -141,7 +149,7 @@ export default function CourseDetailPage() {
       if (msg?.includes('đã đăng ký') || err.response?.status === 400) {
         toast.success('Bạn đã ghi danh khóa học này');
         try {
-          const check = await enrollmentService.checkAccess(id);
+          const check = await enrollmentService.checkAccess(courseId);
           if (check.data?.success) setAccess(check.data.data);
         } catch {
           /* ignore */
@@ -160,20 +168,21 @@ export default function CourseDetailPage() {
       navigate('/login');
       return;
     }
+    if (!courseId) return;
     setWishlistLoading(true);
     try {
       if (inWishlist) {
-        await wishlistService.removeFromWishlist(id);
+        await wishlistService.removeFromWishlist(courseId);
         setInWishlist(false);
         toast.success('Đã xóa khỏi danh sách yêu thích');
       } else {
-        await wishlistService.addToWishlist(id);
+        await wishlistService.addToWishlist(courseId);
         setInWishlist(true);
         toast.success('Đã thêm vào danh sách yêu thích');
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Có lỗi xảy ra');
-      } finally {
+    } finally {
       setWishlistLoading(false);
     }
   };
@@ -188,16 +197,19 @@ export default function CourseDetailPage() {
       toast.error('Khóa học miễn phí, vui lòng đăng ký trực tiếp');
       return;
     }
+    if (!courseId) return;
     setCartLoading(true);
     try {
       if (inCart) {
-        await cartService.removeFromCart(id);
+        await cartService.removeFromCart(courseId);
         setInCart(false);
         toast.success('Đã xóa khỏi giỏ hàng');
+        window.dispatchEvent(new Event('cart-changed'));
       } else {
-        await cartService.addToCart(id);
+        await cartService.addToCart(courseId);
         setInCart(true);
         toast.success('Đã thêm vào giỏ hàng');
+        window.dispatchEvent(new Event('cart-changed'));
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Có lỗi xảy ra');
@@ -286,6 +298,11 @@ export default function CourseDetailPage() {
                   {course.discount_price > 0 && course.price > course.discount_price && (
                     <p className="text-sm text-gray-400 line-through">{formatPrice(course.price)}</p>
                   )}
+                  {isAdmin && Number(payPrice) > 0 && (
+                    <p className="text-xs text-primary-700 mt-2 max-w-md">
+                      Tài khoản admin: được mở khóa học ngay, không cần thanh toán.
+                    </p>
+                  )}
                 </div>
                 <div className="sm:ml-auto flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                   <button
@@ -305,7 +322,7 @@ export default function CourseDetailPage() {
                   </button>
                   {canLearn && firstLessonId ? (
                     <Link
-                      to={`/courses/${id}/lesson/${firstLessonId}`}
+                      to={`/courses/${courseId}/lesson/${firstLessonId}`}
                       className="btn-primary text-center"
                     >
                       Vào học ngay
@@ -382,7 +399,7 @@ export default function CourseDetailPage() {
                       </div>
                       {open ? (
                         <Link
-                          to={`/courses/${id}/lesson/${lesson._id}`}
+                          to={`/courses/${courseId}/lesson/${lesson._id}`}
                           className="text-sm font-medium text-primary-600 hover:underline shrink-0"
                         >
                           Học
@@ -398,7 +415,7 @@ export default function CourseDetailPage() {
           </section>
 
           {/* Reviews Section */}
-          <ReviewsSection courseId={id} />
+          <ReviewsSection courseId={courseId} />
         </div>
       </article>
     </PageLayout>

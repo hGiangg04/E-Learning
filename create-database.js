@@ -167,28 +167,29 @@ async function createDatabase() {
         console.log('✓ Đã chèn 5 categories mẫu');
 
         // Insert Courses
+        // is_published: 1 — API công khai GET /api/courses chỉ trả khóa đã xuất bản
         const coursesData = [
-            { title: 'HTML & CSS cơ bản', description: 'Khóa học HTML CSS cho người mới bắt đầu', category_id: 1, price: 0, thumbnail: '', average_rating: 4.5, review_count: 120, created_at: now },
-            { title: 'JavaScript nâng cao', description: 'Học JavaScript từ cơ bản đến nâng cao', category_id: 1, price: 299000, thumbnail: '', average_rating: 4.8, review_count: 85, created_at: now },
-            { title: 'React JS Master', description: 'Xây dựng ứng dụng React chuyên nghiệp', category_id: 1, price: 599000, thumbnail: '', average_rating: 4.9, review_count: 200, created_at: now },
-            { title: 'Node.js Backend', description: 'Xây dựng RESTful API với Node.js', category_id: 1, price: 499000, thumbnail: '', average_rating: 4.7, review_count: 150, created_at: now },
-            { title: 'Flutter Mobile', description: 'Phát triển ứng dụng di động đa nền tảng', category_id: 2, price: 699000, thumbnail: '', average_rating: 4.6, review_count: 90, created_at: now },
-            { title: 'Python cho Data Science', description: 'Phân tích dữ liệu với Python', category_id: 3, price: 799000, thumbnail: '', average_rating: 4.8, review_count: 180, created_at: now },
-            { title: 'Docker & Kubernetes', description: 'DevOps tools cho developer', category_id: 4, price: 899000, thumbnail: '', average_rating: 4.5, review_count: 75, created_at: now }
+            { title: 'HTML & CSS cơ bản', description: 'Khóa học HTML CSS cho người mới bắt đầu', category_id: 1, price: 0, thumbnail: '', average_rating: 4.5, review_count: 120, is_published: 1, created_at: now },
+            { title: 'JavaScript nâng cao', description: 'Học JavaScript từ cơ bản đến nâng cao', category_id: 1, price: 299000, thumbnail: '', average_rating: 4.8, review_count: 85, is_published: 1, created_at: now },
+            { title: 'React JS Master', description: 'Xây dựng ứng dụng React chuyên nghiệp', category_id: 1, price: 599000, thumbnail: '', average_rating: 4.9, review_count: 200, is_published: 1, created_at: now },
+            { title: 'Node.js Backend', description: 'Xây dựng RESTful API với Node.js', category_id: 1, price: 499000, thumbnail: '', average_rating: 4.7, review_count: 150, is_published: 1, created_at: now },
+            { title: 'Flutter Mobile', description: 'Phát triển ứng dụng di động đa nền tảng', category_id: 2, price: 699000, thumbnail: '', average_rating: 4.6, review_count: 90, is_published: 1, created_at: now },
+            { title: 'Python cho Data Science', description: 'Phân tích dữ liệu với Python', category_id: 3, price: 799000, thumbnail: '', average_rating: 4.8, review_count: 180, is_published: 1, created_at: now },
+            { title: 'Docker & Kubernetes', description: 'DevOps tools cho developer', category_id: 4, price: 899000, thumbnail: '', average_rating: 4.5, review_count: 75, is_published: 1, created_at: now }
         ];
         await courses.insertMany(coursesData);
         console.log('✓ Đã chèn 7 courses mẫu');
 
         // Insert Lessons
         const lessonsData = [
-            { course_id: 1, title: 'Bài 1: Giới thiệu HTML', content: 'HTML là ngôn ngữ đánh dấu siêu văn bản...', video_url: '', position: 1, created_at: now },
-            { course_id: 1, title: 'Bài 2: Cấu trúc HTML', content: 'Cấu trúc cơ bản của một trang web...', video_url: '', position: 2, created_at: now },
-            { course_id: 1, title: 'Bài 3: CSS cơ bản', content: 'CSS dùng để tạo kiểu cho trang web...', video_url: '', position: 3, created_at: now },
-            { course_id: 2, title: 'Bài 1: Biến và Kiểu dữ liệu', content: 'Trong JavaScript có các kiểu dữ liệu...', video_url: '', position: 1, created_at: now },
-            { course_id: 2, title: 'Bài 2: Hàm và Closure', content: 'Function trong JavaScript...', video_url: '', position: 2, created_at: now },
-            { course_id: 3, title: 'Bài 1: Giới thiệu React', content: 'React là thư viện JavaScript...', video_url: '', position: 1, created_at: now },
-            { course_id: 3, title: 'Bài 2: Component & Props', content: 'Props là cách truyền dữ liệu...', video_url: '', position: 2, created_at: now },
-            { course_id: 3, title: 'Bài 3: State & Lifecycle', content: 'State dùng để quản lý dữ liệu...', video_url: '', position: 3, created_at: now }
+            { course_id: 1, title: 'Bài 1: Giới thiệu HTML', content: 'HTML là ngôn ngữ đánh dấu siêu văn bản...', video_url: '', position: 1, is_published: 1, created_at: now },
+            { course_id: 1, title: 'Bài 2: Cấu trúc HTML', content: 'Cấu trúc cơ bản của một trang web...', video_url: '', position: 2, is_published: 1, created_at: now },
+            { course_id: 1, title: 'Bài 3: CSS cơ bản', content: 'CSS dùng để tạo kiểu cho trang web...', video_url: '', position: 3, is_published: 1, created_at: now },
+            { course_id: 2, title: 'Bài 1: Biến và Kiểu dữ liệu', content: 'Trong JavaScript có các kiểu dữ liệu...', video_url: '', position: 1, is_published: 1, created_at: now },
+            { course_id: 2, title: 'Bài 2: Hàm và Closure', content: 'Function trong JavaScript...', video_url: '', position: 2, is_published: 1, created_at: now },
+            { course_id: 3, title: 'Bài 1: Giới thiệu React', content: 'React là thư viện JavaScript...', video_url: '', position: 1, is_published: 1, created_at: now },
+            { course_id: 3, title: 'Bài 2: Component & Props', content: 'Props là cách truyền dữ liệu...', video_url: '', position: 2, is_published: 1, created_at: now },
+            { course_id: 3, title: 'Bài 3: State & Lifecycle', content: 'State dùng để quản lý dữ liệu...', video_url: '', position: 3, is_published: 1, created_at: now }
         ];
         await lessons.insertMany(lessonsData);
         console.log('✓ Đã chèn 8 lessons mẫu');

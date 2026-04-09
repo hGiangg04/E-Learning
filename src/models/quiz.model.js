@@ -11,6 +11,12 @@ const quizSchema = new mongoose.Schema({
         ref: 'Course',
         required: true
     },
+    /** Loại quiz: trắc nghiệm | tự luận (câu hỏi short_answer) | đúng sai */
+    quiz_type: {
+        type: String,
+        enum: ['multiple_choice', 'essay', 'true_false'],
+        default: 'multiple_choice'
+    },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     passing_score: { type: Number, default: 70 },
@@ -21,6 +27,7 @@ const quizSchema = new mongoose.Schema({
     show_correct_answer: { type: Number, default: 1 },
     show_results_immediately: { type: Number, default: 1 },
     is_active: { type: Number, default: 1 },
+    question_count: { type: Number, default: 0 },
     created_at: { type: Date, default: Date.now }
 });
 

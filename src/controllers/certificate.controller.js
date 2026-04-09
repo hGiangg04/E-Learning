@@ -1,7 +1,37 @@
 const UserCertificate = require('../models/userCertificate.model');
 const Course = require('../models/course.model');
+const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
 const Enrollment = require('../models/enrollment.model');
 const CourseProgress = require('../models/courseProgress.model');
+const { createNotification } = require('./notification.controller');
+
+/**
+ * Cấp chứng chỉ nếu chưa có + gửi thông báo (chỉ khi vừa tạo mới).
+ * Gọi sau khi CourseProgress đạt 100% hoặc từ API /certificates/check.
+ */
+exports.tryIssueCertificateForCompletedCourse = async (userId, courseId) => {
+    try {
+        const existingBefore = await UserCertificate.findOne({ user_id: userId, course_id: courseId });
+        const cert = await exports.issueCertificate(userId, courseId);
+        if (!cert) return { certificate: null, newlyIssued: false };
+
+        const newlyIssued = !existingBefore;
+        if (newlyIssued) {
+            const courseDoc = await Course.findById(courseId).select('title');
+            await createNotification({
+                userId,
+                type: 'certificate',
+                title: 'Chúc mừng! Bạn đã nhận chứng chỉ',
+                message: `Bạn đã hoàn thành khóa học "${courseDoc?.title || 'Khóa học'}". Nhấn để xem chi tiết chứng chỉ.`,
+                link: `/certificates/${cert.certificate_number}`
+            });
+        }
+        return { certificate: cert, newlyIssued };
+    } catch (error) {
+        console.error('Lỗi tryIssueCertificateForCompletedCourse:', error);
+        return { certificate: null, newlyIssued: false };
+    }
+};
 
 // Lấy tất cả chứng chỉ của user
 exports.getMyCertificates = async (req, res) => {
@@ -130,14 +160,15 @@ exports.checkAndIssueCertificate = async (req, res) => {
             return res.status(400).json({ success: false, message: 'course_id là bắt buộc' });
         }
 
-        // Kiểm tra khóa học tồn tại
-        const course = await Course.findById(course_id);
+        const course = await resolveCourseByParam(course_id);
         if (!course) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy khóa học' });
         }
 
+        const resolvedCourseId = course._id;
+
         // Kiểm tra đã hoàn thành chưa
-        const progress = await CourseProgress.findOne({ user_id: userId, course_id });
+        const progress = await CourseProgress.findOne({ user_id: userId, course_id: resolvedCourseId });
         if (!progress || Number(progress.progress_percentage) < 100) {
             return res.status(400).json({
                 success: false,
@@ -145,16 +176,21 @@ exports.checkAndIssueCertificate = async (req, res) => {
             });
         }
 
-        // Kiểm tra đã có chứng chỉ chưa
-        let cert = await UserCertificate.findOne({ user_id: userId, course_id });
+        const { certificate: cert, newlyIssued } = await exports.tryIssueCertificateForCompletedCourse(
+            userId,
+            resolvedCourseId
+        );
+
         if (!cert) {
-            cert = await exports.issueCertificate(userId, courseId);
+            return res.status(500).json({ success: false, message: 'Không thể cấp chứng chỉ' });
         }
 
         res.json({
             success: true,
-            message: 'Chúc mừng bạn đã hoàn thành khóa học!',
-            data: { certificate: cert }
+            message: newlyIssued
+                ? 'Chúc mừng bạn đã hoàn thành khóa học!'
+                : 'Bạn đã có chứng chỉ cho khóa học này',
+            data: { certificate: cert, newly_issued: newlyIssued }
         });
     } catch (error) {
         console.error('Lỗi checkAndIssueCertificate:', error);

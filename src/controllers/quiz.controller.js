@@ -4,6 +4,8 @@ const QuestionOption = require('../models/questionOption.model');
 const QuizAttempt = require('../models/quizAttempt.model');
 const QuizAnswer = require('../models/quizAnswer.model');
 const Enrollment = require('../models/enrollment.model');
+const Lesson = require('../models/lesson.model');
+const mongoose = require('mongoose');
 
 function shuffleArray(arr) {
     const a = [...arr];
@@ -34,25 +36,29 @@ function stripCorrectFlags(questions, shuffleOptions) {
 }
 
 const quizController = {
-    /** GET /api/quizzes/lesson/:lessonId — lấy quiz gắn với lesson hoặc course */
+    /** GET /api/quizzes/lesson/:lessonId — ưu tiên quiz gắn bài học; fallback quiz cấp khóa (legacy) */
     getQuizByLesson: async (req, res) => {
         try {
             const { lessonId } = req.params;
-            const lesson = require('../models/lesson.model').findById(lessonId);
-            if (!lesson) {
+            if (!mongoose.Types.ObjectId.isValid(lessonId)) {
+                return res.status(400).json({ success: false, message: 'lessonId không hợp lệ' });
+            }
+
+            const lessonDoc = await Lesson.findById(lessonId);
+            if (!lessonDoc) {
                 return res.status(404).json({ success: false, message: 'Lesson không tồn tại' });
             }
 
-            // 1. Tìm quiz gắn với lesson cụ thể
             let quiz = await Quiz.findOne({
                 lesson_id: lessonId,
                 is_active: 1
-            }).populate('course_id', 'title').populate('lesson_id', 'title');
+            })
+                .populate('course_id', 'title')
+                .populate('lesson_id', 'title');
 
-            // 2. Nếu không có, tìm quiz cấp khóa học (lesson_id = null)
             if (!quiz) {
                 quiz = await Quiz.findOne({
-                    course_id: lesson.course_id,
+                    course_id: lessonDoc.course_id,
                     lesson_id: null,
                     is_active: 1
                 }).populate('course_id', 'title');
@@ -62,7 +68,6 @@ const quizController = {
                 return res.json({ success: true, data: { quiz: null } });
             }
 
-            // Đếm số câu hỏi
             const questionCount = await QuizQuestion.countDocuments({
                 quiz_id: quiz._id,
                 is_active: 1
@@ -75,6 +80,7 @@ const quizController = {
                         id: quiz._id,
                         title: quiz.title,
                         description: quiz.description,
+                        quiz_type: quiz.quiz_type || 'multiple_choice',
                         passing_score: quiz.passing_score,
                         time_limit: quiz.time_limit,
                         max_attempts: quiz.max_attempts,
@@ -145,7 +151,7 @@ const quizController = {
                 course_id: quiz.course_id,
                 status: 'active'
             });
-            if (!enroll) {
+            if (!enroll && req.user.role !== 'admin') {
                 return res.status(403).json({
                     success: false,
                     message: 'Bạn cần đăng ký khóa học để làm bài'
@@ -176,6 +182,7 @@ const quizController = {
                         id: quiz._id,
                         title: quiz.title,
                         description: quiz.description,
+                        quiz_type: quiz.quiz_type || 'multiple_choice',
                         passing_score: quiz.passing_score,
                         time_limit: quiz.time_limit,
                         max_attempts: quiz.max_attempts
@@ -190,7 +197,59 @@ const quizController = {
 
     createQuiz: async (req, res) => {
         try {
-            const quiz = new Quiz(req.body);
+            const {
+                lesson_id,
+                quiz_type = 'multiple_choice',
+                title,
+                description = '',
+                passing_score = 70,
+                time_limit = 0,
+                max_attempts = 1,
+                shuffle_questions = 0,
+                shuffle_options = 0,
+                show_correct_answer = 1,
+                show_results_immediately = 1,
+                is_active = 1
+            } = req.body;
+
+            if (!lesson_id || !mongoose.Types.ObjectId.isValid(lesson_id)) {
+                return res.status(400).json({ success: false, message: 'lesson_id là bắt buộc và phải hợp lệ' });
+            }
+            if (!title || !String(title).trim()) {
+                return res.status(400).json({ success: false, message: 'title là bắt buộc' });
+            }
+
+            const lessonDoc = await Lesson.findById(lesson_id);
+            if (!lessonDoc) {
+                return res.status(404).json({ success: false, message: 'Không tìm thấy bài học' });
+            }
+
+            const dup = await Quiz.findOne({ lesson_id, is_active: 1 });
+            if (dup) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Bài học này đã có quiz. Hãy sửa hoặc xóa quiz hiện có.'
+                });
+            }
+
+            const allowedTypes = ['multiple_choice', 'essay', 'true_false'];
+            const qt = allowedTypes.includes(quiz_type) ? quiz_type : 'multiple_choice';
+
+            const quiz = new Quiz({
+                lesson_id,
+                course_id: lessonDoc.course_id,
+                quiz_type: qt,
+                title: String(title).trim(),
+                description,
+                passing_score,
+                time_limit,
+                max_attempts,
+                shuffle_questions: shuffle_questions ? 1 : 0,
+                shuffle_options: shuffle_options ? 1 : 0,
+                show_correct_answer: show_correct_answer ? 1 : 0,
+                show_results_immediately: show_results_immediately ? 1 : 0,
+                is_active: is_active ? 1 : 0
+            });
             await quiz.save();
             res.status(201).json({ success: true, message: 'Tạo quiz thành công', data: { quiz } });
         } catch (error) {
@@ -200,10 +259,42 @@ const quizController = {
 
     updateQuiz: async (req, res) => {
         try {
-            const quiz = await Quiz.findByIdAndUpdate(req.params.id, req.body, { new: true });
-            if (!quiz) {
+            const existing = await Quiz.findById(req.params.id);
+            if (!existing) {
                 return res.status(404).json({ success: false, message: 'Quiz không tồn tại' });
             }
+
+            const patch = { ...req.body };
+            delete patch.course_id;
+
+            if (patch.lesson_id) {
+                if (!mongoose.Types.ObjectId.isValid(patch.lesson_id)) {
+                    return res.status(400).json({ success: false, message: 'lesson_id không hợp lệ' });
+                }
+                const lessonDoc = await Lesson.findById(patch.lesson_id);
+                if (!lessonDoc) {
+                    return res.status(404).json({ success: false, message: 'Không tìm thấy bài học' });
+                }
+                const other = await Quiz.findOne({
+                    lesson_id: patch.lesson_id,
+                    is_active: 1,
+                    _id: { $ne: existing._id }
+                });
+                if (other) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Bài học đích đã có quiz khác'
+                    });
+                }
+                patch.course_id = lessonDoc.course_id;
+            }
+
+            if (patch.quiz_type) {
+                const allowed = ['multiple_choice', 'essay', 'true_false'];
+                if (!allowed.includes(patch.quiz_type)) delete patch.quiz_type;
+            }
+
+            const quiz = await Quiz.findByIdAndUpdate(req.params.id, patch, { new: true });
             res.json({ success: true, data: { quiz } });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
@@ -272,7 +363,7 @@ const quizController = {
                 course_id: quiz.course_id,
                 status: 'active'
             });
-            if (!enroll) {
+            if (!enroll && req.user.role !== 'admin') {
                 return res.status(403).json({
                     success: false,
                     message: 'Bạn cần đăng ký khóa học'
@@ -336,8 +427,14 @@ const quizController = {
                 let pts = 0;
 
                 if (q.question_type === 'short_answer') {
-                    pts = 0;
-                    isCorrect = 0;
+                    const text = (a.answer_text || '').trim();
+                    if (text.length > 0) {
+                        pts = q.points || 0;
+                        isCorrect = 1;
+                    } else {
+                        pts = 0;
+                        isCorrect = 0;
+                    }
                 } else if (a.option_id) {
                     const sel = await QuestionOption.findById(a.option_id);
                     if (sel && sel.is_correct) {

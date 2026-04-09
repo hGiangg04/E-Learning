@@ -28,7 +28,19 @@ export default function CoursesPage() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pages, setPages] = useState(1);
-  const [showFilters, setShowFilters] = useState(false);
+  /** Mặc định thu gọn bộ lọc; mở sẵn nếu URL đã có tham số lọc */
+  const [showFilters, setShowFilters] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const p = new URLSearchParams(window.location.search);
+    return !!(
+      p.get('level') ||
+      p.get('min_price') ||
+      p.get('max_price') ||
+      p.get('min_rating') ||
+      p.get('language') ||
+      (p.get('sort') && p.get('sort') !== 'newest')
+    );
+  });
 
   useEffect(() => {
     setInputSearch(searchFromUrl);
@@ -134,8 +146,8 @@ export default function CoursesPage() {
             Danh sách khóa học đang mở đăng ký. Dữ liệu lấy trực tiếp từ API backend.
           </p>
 
-          <div className="mt-8 flex flex-col lg:flex-row gap-4 max-w-5xl">
-            <form onSubmit={handleSearch} className="flex-1 flex gap-3">
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 max-w-5xl">
+            <form onSubmit={handleSearch} className="flex-1 flex gap-3 min-w-0">
               <input
                 type="search"
                 placeholder="Tìm theo tên hoặc mô tả…"
@@ -148,22 +160,33 @@ export default function CoursesPage() {
               </button>
             </form>
             <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="lg:hidden flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50"
+              type="button"
+              onClick={() => setShowFilters((v) => !v)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 shrink-0 text-gray-700"
+              aria-expanded={showFilters}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
               </svg>
-              Bộ lọc
-              {hasActiveFilters && <span className="w-2 h-2 bg-red-500 rounded-full"></span>}
+              <span className="font-medium">Bộ lọc nâng cao</span>
+              <svg
+                className={`w-4 h-4 shrink-0 text-gray-500 transition-transform ${showFilters ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              {hasActiveFilters && <span className="w-2 h-2 bg-primary-500 rounded-full" aria-hidden />}
             </button>
           </div>
 
-          {/* Bộ lọc nâng cao */}
-          <div className={`mt-4 max-w-5xl ${showFilters ? 'block' : 'hidden lg:block'}`}>
-            <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Bộ lọc nâng cao</h3>
+          {/* Bộ lọc nâng cao — thu gọn mặc định, bật bằng nút (mọi kích thước màn hình) */}
+          {showFilters && (
+          <div className="mt-4 max-w-5xl">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-semibold text-gray-900">Tùy chọn lọc &amp; sắp xếp</h3>
                 {hasActiveFilters && (
                   <button
                     onClick={clearAllFilters}
@@ -313,6 +336,7 @@ export default function CoursesPage() {
               )}
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -330,7 +354,21 @@ export default function CoursesPage() {
             ))}
           </div>
         ) : courses.length === 0 ? (
-          <p className="text-center text-gray-600 py-16">Chưa có khóa học phù hợp hoặc API chưa trả dữ liệu.</p>
+          <div className="text-center text-gray-600 py-16 max-w-lg mx-auto space-y-3">
+            <p className="font-medium text-gray-800">Chưa có khóa học phù hợp.</p>
+            <p className="text-sm">
+              Kiểm tra backend đang chạy, hoặc trong admin bật <strong>Xuất bản</strong> cho khóa học
+              (<code className="text-xs bg-gray-100 px-1 rounded">is_published = 1</code>). Thử{' '}
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="text-primary-600 font-medium hover:underline"
+              >
+                xóa bộ lọc
+              </button>
+              .
+            </p>
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

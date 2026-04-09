@@ -50,6 +50,7 @@ export default function CartPage() {
             await cartService.removeFromCart(courseId);
             setItems(prev => prev.filter(item => String(item.course._id) !== String(courseId)));
             toast.success('Đã xóa khỏi giỏ hàng');
+            window.dispatchEvent(new Event('cart-changed'));
         } catch (e) {
             toast.error(e.response?.data?.message || 'Không thể xóa');
         }

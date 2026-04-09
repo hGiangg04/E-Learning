@@ -5,6 +5,49 @@ import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
 import { adminApi } from '../../api/adminApi';
 import { quizQuestionService } from '../../api/quizQuestionService';
+import { lessonService } from '../../api/lessonService';
+
+const QUIZ_TYPE_LABELS = {
+  multiple_choice: 'Trắc nghiệm',
+  essay: 'Tự luận',
+  true_false: 'Đúng / Sai',
+};
+
+function defaultQuestionFormForQuizType(quizType) {
+  if (quizType === 'essay') {
+    return {
+      question_text: '',
+      question_type: 'short_answer',
+      points: 1,
+      explanation: '',
+      options: [],
+    };
+  }
+  if (quizType === 'true_false') {
+    return {
+      question_text: '',
+      question_type: 'true_false',
+      points: 1,
+      explanation: '',
+      options: [
+        { option_text: 'Đúng', is_correct: true },
+        { option_text: 'Sai', is_correct: false },
+      ],
+    };
+  }
+  return {
+    question_text: '',
+    question_type: 'multiple_choice',
+    points: 1,
+    explanation: '',
+    options: [
+      { option_text: '', is_correct: true },
+      { option_text: '', is_correct: false },
+      { option_text: '', is_correct: false },
+      { option_text: '', is_correct: false },
+    ],
+  };
+}
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -20,7 +63,6 @@ export default function QuizManagement() {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [questionsLoading, setQuestionsLoading] = useState(false);
-  const [questionModalOpen, setQuestionModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [questionForm, setQuestionForm] = useState({
     question_text: '',
@@ -34,8 +76,13 @@ export default function QuizManagement() {
       { option_text: '', is_correct: false }
     ]
   });
+  const [courses, setCourses] = useState([]);
+  const [lessons, setLessons] = useState([]);
+  const [filterCourseId, setFilterCourseId] = useState('');
+  const [lessonsLoading, setLessonsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    course_id: '',
+    lesson_id: '',
+    quiz_type: 'multiple_choice',
     title: '',
     description: '',
     time_limit: 30,
@@ -67,12 +114,60 @@ export default function QuizManagement() {
     fetchQuizzes();
   }, []);
 
+  useEffect(() => {
+    const loadCourses = async () => {
+      try {
+        const response = await adminApi.getCourses({ limit: 500 });
+        if (response.data?.success) {
+          setCourses(response.data.data?.courses || []);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadCourses();
+  }, []);
+
+  useEffect(() => {
+    if (!filterCourseId) {
+      setLessons([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLessonsLoading(true);
+      try {
+        const res = await lessonService.getLessonsByCourseAdmin(filterCourseId);
+        if (!cancelled && res?.success) {
+          setLessons(res.data?.lessons || []);
+        }
+      } catch (e) {
+        if (!cancelled) setLessons([]);
+      } finally {
+        if (!cancelled) setLessonsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filterCourseId]);
+
   const columns = [
     { key: 'title', label: 'Tên quiz' },
     {
       key: 'course_id',
       label: 'Khóa học',
       render: (value) => <span className="font-medium">{value?.title || '-'}</span>,
+    },
+    {
+      key: 'lesson_id',
+      label: 'Bài học',
+      render: (value) => <span className="font-medium">{value?.title || '-'}</span>,
+    },
+    {
+      key: 'quiz_type',
+      label: 'Loại quiz',
+      render: (value) => <span>{QUIZ_TYPE_LABELS[value] || value || '-'}</span>,
     },
     { key: 'time_limit', label: 'Thời gian (phút)' },
     { key: 'passing_score', label: 'Điểm đạt (%)' },
@@ -93,35 +188,52 @@ export default function QuizManagement() {
     },
   ];
 
-  const handleEdit = (quiz) => {
+  const handleEdit = async (quiz) => {
     setEditingQuiz(quiz);
+    const cid = String(quiz.course_id?._id || quiz.course_id || '');
+    const lid = String(quiz.lesson_id?._id || quiz.lesson_id || '');
+    setFilterCourseId(cid);
     setFormData({
-      course_id: quiz.course_id?._id || quiz.course_id || '',
+      lesson_id: lid,
+      quiz_type: quiz.quiz_type || 'multiple_choice',
       title: quiz.title || '',
       description: quiz.description || '',
-      time_limit: quiz.time_limit || 30,
-      passing_score: quiz.passing_score || 70,
-      max_attempts: quiz.max_attempts || 3,
+      time_limit: quiz.time_limit ?? 30,
+      passing_score: quiz.passing_score ?? 70,
+      max_attempts: quiz.max_attempts ?? 3,
       is_active: quiz.is_active ?? 1,
-      shuffle_questions: quiz.shuffle_questions || false,
-      shuffle_options: quiz.shuffle_options || false,
-      show_results_immediately: quiz.show_results_immediately ?? true,
-      show_correct_answer: quiz.show_correct_answer ?? true,
+      shuffle_questions: !!quiz.shuffle_questions,
+      shuffle_options: !!quiz.shuffle_options,
+      show_results_immediately: quiz.show_results_immediately !== 0,
+      show_correct_answer: quiz.show_correct_answer !== 0,
     });
     setIsModalOpen(true);
+    if (cid) {
+      try {
+        const res = await lessonService.getLessonsByCourseAdmin(cid);
+        if (res?.success) setLessons(res.data?.lessons || []);
+      } catch {
+        setLessons([]);
+      }
+    }
   };
 
-  const handleView = async (quiz) => {
+  const openQuizQuestionEditor = async (quizId) => {
     try {
-      const response = await adminApi.getQuiz(quiz._id);
+      const response = await adminApi.getQuiz(quizId);
       if (response.data.success) {
+        setEditingQuiz(null);
         setSelectedQuiz(response.data.data);
-        setQuestionModalOpen(true);
-        loadQuestions(quiz._id);
+        setIsModalOpen(true);
+        loadQuestions(quizId);
       }
     } catch (error) {
       toast.error('Không thể tải chi tiết quiz');
     }
+  };
+
+  const handleView = async (quiz) => {
+    await openQuizQuestionEditor(quiz._id);
   };
 
   const loadQuestions = async (quizId) => {
@@ -140,35 +252,26 @@ export default function QuizManagement() {
 
   const handleAddQuestion = () => {
     setEditingQuestion(null);
-    setQuestionForm({
-      question_text: '',
-      question_type: 'single',
-      points: 1,
-      explanation: '',
-      options: [
-        { option_text: '', is_correct: true },
-        { option_text: '', is_correct: false },
-        { option_text: '', is_correct: false },
-        { option_text: '', is_correct: false }
-      ]
-    });
-    // Mở rộng modal để hiển thị form câu hỏi
+    const qt = selectedQuiz?.quiz?.quiz_type || 'multiple_choice';
+    setQuestionForm(defaultQuestionFormForQuizType(qt));
   };
 
   const handleEditQuestion = (q) => {
     setEditingQuestion(q);
+    const isEssay = q.question_type === 'short_answer';
     setQuestionForm({
       question_text: q.question_text || '',
-      question_type: q.question_type || 'single',
+      question_type: q.question_type || 'multiple_choice',
       points: q.points || 1,
       explanation: q.explanation || '',
-      options: q.options?.length > 0 ? q.options.map(o => ({
-        option_text: o.option_text || '',
-        is_correct: o.is_correct || false
-      })) : [
-        { option_text: '', is_correct: true },
-        { option_text: '', is_correct: false }
-      ]
+      options: isEssay
+        ? []
+        : q.options?.length > 0
+          ? q.options.map((o) => ({
+              option_text: o.option_text || '',
+              is_correct: !!o.is_correct,
+            }))
+          : defaultQuestionFormForQuizType('multiple_choice').options,
     });
   };
 
@@ -215,48 +318,68 @@ export default function QuizManagement() {
       toast.error('Vui lòng nhập nội dung câu hỏi');
       return;
     }
-    const validOptions = questionForm.options.filter(o => o.option_text.trim());
-    if (validOptions.length < 2) {
-      toast.error('Cần ít nhất 2 đáp án hợp lệ');
-      return;
-    }
-    if (!questionForm.options.some(o => o.is_correct)) {
-      toast.error('Cần chọn ít nhất 1 đáp án đúng');
-      return;
-    }
 
     const quizId = selectedQuiz?._id || selectedQuiz?.quiz?._id;
+    const quizKind = selectedQuiz?.quiz?.quiz_type || 'multiple_choice';
+
     try {
-      if (editingQuestion) {
-        await quizQuestionService.updateQuestion(editingQuestion._id, {
-          ...questionForm,
-          options: questionForm.options.filter(o => o.option_text.trim())
-        });
-        toast.success('Đã cập nhật câu hỏi');
+      if (quizKind === 'essay') {
+        if (editingQuestion) {
+          await quizQuestionService.updateQuestion(editingQuestion._id, {
+            question_text: questionForm.question_text.trim(),
+            question_type: 'short_answer',
+            points: questionForm.points,
+            explanation: questionForm.explanation,
+            options: [],
+          });
+          toast.success('Đã cập nhật câu hỏi');
+        } else {
+          await quizQuestionService.addQuestion({
+            quiz_id: quizId,
+            question_text: questionForm.question_text.trim(),
+            question_type: 'short_answer',
+            points: questionForm.points,
+            explanation: questionForm.explanation,
+          });
+          toast.success('Đã thêm câu hỏi');
+        }
       } else {
-        await quizQuestionService.addQuestion({
-          quiz_id: quizId,
-          ...questionForm,
-          options: questionForm.options.filter(o => o.option_text.trim())
-        });
-        toast.success('Đã thêm câu hỏi');
+        const validOptions = questionForm.options.filter((o) => o.option_text.trim());
+        if (validOptions.length < 2) {
+          toast.error('Cần ít nhất 2 đáp án hợp lệ');
+          return;
+        }
+        if (!validOptions.some((o) => o.is_correct)) {
+          toast.error('Cần chọn ít nhất 1 đáp án đúng');
+          return;
+        }
+        const qType = quizKind === 'true_false' ? 'true_false' : 'multiple_choice';
+        if (editingQuestion) {
+          await quizQuestionService.updateQuestion(editingQuestion._id, {
+            question_text: questionForm.question_text.trim(),
+            question_type: qType,
+            points: questionForm.points,
+            explanation: questionForm.explanation,
+            options: validOptions,
+          });
+          toast.success('Đã cập nhật câu hỏi');
+        } else {
+          await quizQuestionService.addQuestion({
+            quiz_id: quizId,
+            question_text: questionForm.question_text.trim(),
+            question_type: qType,
+            points: questionForm.points,
+            explanation: questionForm.explanation,
+            options: validOptions,
+          });
+          toast.success('Đã thêm câu hỏi');
+        }
       }
       loadQuestions(quizId);
-      setQuestionForm({
-        question_text: '',
-        question_type: 'single',
-        points: 1,
-        explanation: '',
-        options: [
-          { option_text: '', is_correct: true },
-          { option_text: '', is_correct: false },
-          { option_text: '', is_correct: false },
-          { option_text: '', is_correct: false }
-        ]
-      });
+      setQuestionForm(defaultQuestionFormForQuizType(quizKind));
       setEditingQuestion(null);
-    } catch (e) {
-      toast.error(e.response?.data?.message || 'Có lỗi xảy ra');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Có lỗi xảy ra');
     }
   };
 
@@ -274,22 +397,49 @@ export default function QuizManagement() {
     }
   };
 
+  const buildQuizPayload = () => ({
+    lesson_id: formData.lesson_id,
+    quiz_type: formData.quiz_type,
+    title: formData.title.trim(),
+    description: formData.description,
+    time_limit: Number(formData.time_limit),
+    passing_score: Number(formData.passing_score),
+    max_attempts: Number(formData.max_attempts),
+    is_active: formData.is_active ? 1 : 0,
+    shuffle_questions: formData.shuffle_questions ? 1 : 0,
+    shuffle_options: formData.shuffle_options ? 1 : 0,
+    show_correct_answer: formData.show_correct_answer ? 1 : 0,
+    show_results_immediately: formData.show_results_immediately ? 1 : 0,
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.lesson_id) {
+      toast.error('Vui lòng chọn khóa học và bài học');
+      return;
+    }
     try {
       if (editingQuiz) {
-        const response = await adminApi.updateQuiz(editingQuiz._id, formData);
+        const response = await adminApi.updateQuiz(editingQuiz._id, buildQuizPayload());
         if (response.data.success) {
           toast.success('Cập nhật quiz thành công');
           setIsModalOpen(false);
+          setEditingQuiz(null);
           fetchQuizzes();
         }
       } else {
-        const response = await adminApi.createQuiz(formData);
+        const response = await adminApi.createQuiz(buildQuizPayload());
         if (response.data.success) {
-          toast.success('Tạo quiz thành công');
-          setIsModalOpen(false);
-          fetchQuizzes();
+          const created = response.data.data?.quiz;
+          await fetchQuizzes();
+          if (created?._id) {
+            toast.success('Đã tạo quiz — thêm câu hỏi và đáp án đúng bên dưới');
+            await openQuizQuestionEditor(created._id);
+          } else {
+            toast.success('Tạo quiz thành công');
+            setIsModalOpen(false);
+            fetchQuizzes();
+          }
         }
       }
     } catch (error) {
@@ -309,8 +459,11 @@ export default function QuizManagement() {
             onClick={() => {
               setEditingQuiz(null);
               setSelectedQuiz(null);
+              setFilterCourseId('');
+              setLessons([]);
               setFormData({
-                course_id: '',
+                lesson_id: '',
+                quiz_type: 'multiple_choice',
                 title: '',
                 description: '',
                 time_limit: 30,
@@ -349,6 +502,7 @@ export default function QuizManagement() {
             setIsModalOpen(false);
             setEditingQuiz(null);
             setSelectedQuiz(null);
+            setFilterCourseId('');
           }}
           title={editingQuiz ? 'Chỉnh sửa Quiz' : selectedQuiz ? 'Chi tiết Quiz' : 'Thêm Quiz mới'}
           size="lg"
@@ -363,6 +517,16 @@ export default function QuizManagement() {
                 <div>
                   <label className="text-sm text-gray-500">Khóa học</label>
                   <p className="font-medium">{selectedQuiz.quiz?.course_id?.title || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-500">Bài học</label>
+                  <p className="font-medium">{selectedQuiz.quiz?.lesson_id?.title || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-500">Loại quiz</label>
+                  <p className="font-medium">
+                    {QUIZ_TYPE_LABELS[selectedQuiz.quiz?.quiz_type] || selectedQuiz.quiz?.quiz_type || '-'}
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-4">
@@ -386,10 +550,17 @@ export default function QuizManagement() {
 
               {/* Question Management */}
               <div className="border-t pt-4">
+                {questions.length === 0 && (
+                  <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Chưa có câu hỏi. Nhấn <strong>+ Thêm câu hỏi</strong> — với <strong>trắc nghiệm / đúng–sai</strong> điền các đáp án và chọn{' '}
+                    <strong>ô tròn</strong> bên cạnh đáp án <strong>đúng</strong>. <strong>Tự luận</strong>: chỉ nhập nội dung câu (học viên trả lời bằng văn bản).
+                  </p>
+                )}
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-medium">Danh sách câu hỏi ({questions.length})</h4>
                   <button
-                    onClick={() => setEditingQuestion(null)}
+                    type="button"
+                    onClick={handleAddQuestion}
                     className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
                   >
                     + Thêm câu hỏi
@@ -431,43 +602,53 @@ export default function QuizManagement() {
                         />
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Đáp án</label>
-                      {questionForm.options.map((opt, idx) => (
-                        <div key={idx} className="flex items-center gap-2 mb-2">
-                          <input
-                            type="radio"
-                            name="correct"
-                            checked={opt.is_correct}
-                            onChange={() => handleQuestionOptionChange(idx, 'is_correct', true)}
-                            className="w-4 h-4 text-primary-600"
-                            title="Đáp án đúng"
-                          />
-                          <input
-                            type="text"
-                            value={opt.option_text}
-                            onChange={e => handleQuestionOptionChange(idx, 'option_text', e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            placeholder={`Đáp án ${idx + 1}`}
-                            required
-                          />
+                    {selectedQuiz?.quiz?.quiz_type === 'essay' ? (
+                      <p className="text-sm text-gray-600">
+                        Quiz tự luận: học viên nhập câu trả lời; điểm tính khi có nội dung (hệ thống tự chấm đơn giản).
+                      </p>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Đáp án</label>
+                        {questionForm.options.map((opt, idx) => (
+                          <div key={idx} className="flex items-center gap-2 mb-2">
+                            <input
+                              type="radio"
+                              name="correct"
+                              checked={opt.is_correct}
+                              onChange={() => handleQuestionOptionChange(idx, 'is_correct', true)}
+                              className="w-4 h-4 text-primary-600"
+                              title="Đáp án đúng"
+                            />
+                            <input
+                              type="text"
+                              value={opt.option_text}
+                              onChange={(e) => handleQuestionOptionChange(idx, 'option_text', e.target.value)}
+                              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              placeholder={`Đáp án ${idx + 1}`}
+                              required
+                            />
+                            {selectedQuiz?.quiz?.quiz_type !== 'true_false' && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveOption(idx)}
+                                className="p-2 text-gray-400 hover:text-red-500"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {selectedQuiz?.quiz?.quiz_type !== 'true_false' && (
                           <button
                             type="button"
-                            onClick={() => handleRemoveOption(idx)}
-                            className="p-2 text-gray-400 hover:text-red-500"
+                            onClick={handleAddOption}
+                            className="text-sm text-primary-600 hover:underline mt-1"
                           >
-                            ×
+                            + Thêm đáp án
                           </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={handleAddOption}
-                        className="text-sm text-primary-600 hover:underline mt-1"
-                      >
-                        + Thêm đáp án
-                      </button>
-                    </div>
+                        )}
+                      </div>
+                    )}
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
@@ -514,41 +695,49 @@ export default function QuizManagement() {
                         />
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Đáp án</label>
-                      {questionForm.options.map((opt, idx) => (
-                        <div key={idx} className="flex items-center gap-2 mb-2">
-                          <input
-                            type="radio"
-                            name="correct_edit"
-                            checked={opt.is_correct}
-                            onChange={() => handleQuestionOptionChange(idx, 'is_correct', true)}
-                            className="w-4 h-4 text-primary-600"
-                          />
-                          <input
-                            type="text"
-                            value={opt.option_text}
-                            onChange={e => handleQuestionOptionChange(idx, 'option_text', e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            required
-                          />
+                    {selectedQuiz?.quiz?.quiz_type === 'essay' ? (
+                      <p className="text-sm text-gray-600">Câu hỏi tự luận — không có đáp án trắc nghiệm.</p>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Đáp án</label>
+                        {questionForm.options.map((opt, idx) => (
+                          <div key={idx} className="flex items-center gap-2 mb-2">
+                            <input
+                              type="radio"
+                              name="correct_edit"
+                              checked={opt.is_correct}
+                              onChange={() => handleQuestionOptionChange(idx, 'is_correct', true)}
+                              className="w-4 h-4 text-primary-600"
+                            />
+                            <input
+                              type="text"
+                              value={opt.option_text}
+                              onChange={(e) => handleQuestionOptionChange(idx, 'option_text', e.target.value)}
+                              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              required
+                            />
+                            {selectedQuiz?.quiz?.quiz_type !== 'true_false' && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveOption(idx)}
+                                className="p-2 text-gray-400 hover:text-red-500"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {selectedQuiz?.quiz?.quiz_type !== 'true_false' && (
                           <button
                             type="button"
-                            onClick={() => handleRemoveOption(idx)}
-                            className="p-2 text-gray-400 hover:text-red-500"
+                            onClick={handleAddOption}
+                            className="text-sm text-primary-600 hover:underline mt-1"
                           >
-                            ×
+                            + Thêm đáp án
                           </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={handleAddOption}
-                        className="text-sm text-primary-600 hover:underline mt-1"
-                      >
-                        + Thêm đáp án
-                      </button>
-                    </div>
+                        )}
+                      </div>
+                    )}
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
@@ -611,17 +800,73 @@ export default function QuizManagement() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Khóa học ID</label>
-                <input
-                  type="text"
-                  value={formData.course_id}
-                  onChange={(e) => setFormData({ ...formData, course_id: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="ObjectId của khóa học"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Khóa học</label>
+                  <select
+                    value={filterCourseId}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFilterCourseId(v);
+                      setFormData((prev) => ({ ...prev, lesson_id: '' }));
+                    }}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    required
+                  >
+                    <option value="">— Chọn khóa học —</option>
+                    {courses.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bài học</label>
+                  <select
+                    value={formData.lesson_id}
+                    onChange={(e) => setFormData({ ...formData, lesson_id: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    required
+                    disabled={!filterCourseId || lessonsLoading}
+                  >
+                    <option value="">{lessonsLoading ? 'Đang tải…' : '— Chọn bài học —'}</option>
+                    {lessons.map((l) => (
+                      <option key={l._id} value={l._id}>
+                        {l.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              <div>
+                <span className="block text-sm font-medium text-gray-700 mb-2">Loại quiz</span>
+                <div className="flex flex-wrap gap-4">
+                  {[
+                    { value: 'multiple_choice', label: 'Trắc nghiệm' },
+                    { value: 'essay', label: 'Tự luận' },
+                    { value: 'true_false', label: 'Đúng / Sai' },
+                  ].map((opt) => (
+                    <label key={opt.value} className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="quiz_type"
+                        value={opt.value}
+                        checked={formData.quiz_type === opt.value}
+                        onChange={() => setFormData({ ...formData, quiz_type: opt.value })}
+                        className="w-4 h-4 text-primary-600"
+                        disabled={!!editingQuiz}
+                      />
+                      <span className="text-sm text-gray-700">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+                {editingQuiz && (
+                  <p className="text-xs text-amber-600 mt-1">Loại quiz không đổi khi sửa (để tránh lệch dữ liệu câu hỏi).</p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tên Quiz</label>
                 <input
@@ -693,6 +938,12 @@ export default function QuizManagement() {
                   <span className="text-sm text-gray-700">Xáo trộn đáp án</span>
                 </label>
               </div>
+              {!editingQuiz && (
+                <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                  <strong>Bước tiếp theo:</strong> Nhấn <strong>Thêm mới</strong> để lưu quiz, sau đó màn hình sẽ chuyển sang phần{' '}
+                  <strong>thêm câu hỏi</strong>. Với trắc nghiệm / đúng–sai, chọn <strong>ô tròn</strong> cạnh đáp án đúng; với tự luận chỉ cần nhập nội dung câu hỏi.
+                </p>
+              )}
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
