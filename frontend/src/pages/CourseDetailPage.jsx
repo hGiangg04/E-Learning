@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useState, useEffect } from 'react';
 import PageLayout from '../components/PageLayout';
-import { courseService, enrollmentService, lessonService } from '../api';
+import { courseService, enrollmentService, lessonService, wishlistService } from '../api';
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -13,6 +14,8 @@ export default function CourseDetailPage() {
   const [lessonsLoading, setLessonsLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [access, setAccess] = useState(null);
+  const [inWishlist, setInWishlist] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   useEffect(() => {
@@ -76,6 +79,19 @@ export default function CourseDetailPage() {
     };
   }, [id, token]);
 
+  // Kiểm tra wishlist
+  useEffect(() => {
+    if (!id || !token) {
+      setInWishlist(false);
+      return;
+    }
+    wishlistService.checkWishlist(id)
+      .then(res => {
+        if (res.success) setInWishlist(res.data?.in_wishlist);
+      })
+      .catch(() => setInWishlist(false));
+  }, [id, token]);
+
   const formatPrice = (price) => {
     if (price === 0 || price == null) return 'Miễn phí';
     return new Intl.NumberFormat('vi-VN', {
@@ -116,6 +132,30 @@ export default function CourseDetailPage() {
       }
     } finally {
       setEnrolling(false);
+    }
+  };
+
+  const toggleWishlist = async () => {
+    if (!token) {
+      toast.error('Vui lòng đăng nhập để thêm vào yêu thích');
+      navigate('/login');
+      return;
+    }
+    setWishlistLoading(true);
+    try {
+      if (inWishlist) {
+        await wishlistService.removeFromWishlist(id);
+        setInWishlist(false);
+        toast.success('Đã xóa khỏi danh sách yêu thích');
+      } else {
+        await wishlistService.addToWishlist(id);
+        setInWishlist(true);
+        toast.success('Đã thêm vào danh sách yêu thích');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Có lỗi xảy ra');
+    } finally {
+      setWishlistLoading(false);
     }
   };
 
@@ -201,6 +241,21 @@ export default function CourseDetailPage() {
                   )}
                 </div>
                 <div className="sm:ml-auto flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={toggleWishlist}
+                    disabled={wishlistLoading}
+                    className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border transition-colors disabled:opacity-60 ${
+                      inWishlist
+                        ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className={`w-5 h-5 ${inWishlist ? 'fill-red-500' : ''}`} fill={inWishlist ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    {inWishlist ? 'Đã yêu thích' : 'Yêu thích'}
+                  </button>
                   {canLearn && firstLessonId ? (
                     <Link
                       to={`/courses/${id}/lesson/${firstLessonId}`}

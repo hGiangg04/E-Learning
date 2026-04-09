@@ -129,6 +129,12 @@ export default function Navbar() {
                       Hồ sơ
                     </Link>
                     <Link
+                      to="/wishlist"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Yêu thích
+                    </Link>
+                    <Link
                       to="/my-courses"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >
@@ -198,6 +204,9 @@ export default function Navbar() {
                   </div>
                   <Link to="/profile" className="text-sm text-gray-600">
                     Hồ sơ
+                  </Link>
+                  <Link to="/wishlist" className="text-sm text-gray-600">
+                    Yêu thích
                   </Link>
                   <Link to="/my-courses" className="text-sm text-gray-600">
                     Khóa học của tôi
