@@ -69,13 +69,33 @@ const courseController = {
     // GET /api/courses — công khai: chỉ khóa đã publish
     getAllCourses: async (req, res) => {
         try {
-            const { page = 1, limit = 10, category_id, level, search, sort = '-created_at' } = req.query;
+            const {
+                page = 1,
+                limit = 10,
+                category_id,
+                level,
+                search,
+                sort = '-created_at',
+                min_price,
+                max_price,
+                min_rating,
+                language
+            } = req.query;
 
             const query = { is_published: 1 };
+
+            // Lọc theo danh mục
             if (category_id && mongoose.Types.ObjectId.isValid(category_id)) {
                 query.category_id = category_id;
             }
+
+            // Lọc theo cấp độ
             if (level) query.level = level;
+
+            // Lọc theo ngôn ngữ
+            if (language) query.language = language;
+
+            // Tìm kiếm theo tiêu đề hoặc mô tả
             if (search) {
                 query.$or = [
                     { title: { $regex: search, $options: 'i' } },
@@ -83,12 +103,81 @@ const courseController = {
                 ];
             }
 
+            // Lọc theo khoảng giá (dùng discount_price nếu có giảm giá, không thì dùng price)
+            if (min_price !== undefined || max_price !== undefined) {
+                query.$expr = {
+                    $let: {
+                        vars: {
+                            effectivePrice: {
+                                $cond: [
+                                    { $and: [
+                                        { $gte: ['$discount_price', 1] },
+                                        { $or: [
+                                            { $not: '$discount_start' },
+                                            { $lte: ['$discount_start', new Date()] }
+                                        ]},
+                                        { $or: [
+                                            { $not: '$discount_end' },
+                                            { $gte: ['$discount_end', new Date()] }
+                                        ]}
+                                    ]},
+                                    '$discount_price',
+                                    '$price'
+                                ]
+                            }
+                        },
+                        in: {
+                            $and: [
+                                { $gte: ['$$effectivePrice', Number(min_price) || 0] },
+                                { $lte: ['$$effectivePrice', Number(max_price) || 999999999] }
+                            ]
+                        }
+                    }
+                };
+            }
+
+            // Lọc theo đánh giá tối thiểu
+            if (min_rating) {
+                query.average_rating = { $gte: Number(min_rating) };
+            }
+
+            // Xác định sort field và direction
+            let sortConfig = {};
+            switch (sort) {
+                case 'price_asc':
+                    sortConfig = { price: 1 };
+                    break;
+                case 'price_desc':
+                    sortConfig = { price: -1 };
+                    break;
+                case 'rating':
+                    sortConfig = { average_rating: -1, review_count: -1 };
+                    break;
+                case 'students':
+                    sortConfig = { student_count: -1 };
+                    break;
+                case 'newest':
+                    sortConfig = { created_at: -1 };
+                    break;
+                case 'oldest':
+                    sortConfig = { created_at: 1 };
+                    break;
+                case 'title_asc':
+                    sortConfig = { title: 1 };
+                    break;
+                case 'title_desc':
+                    sortConfig = { title: -1 };
+                    break;
+                default:
+                    sortConfig = { created_at: -1 };
+            }
+
             const courses = await Course.find(query)
                 .populate('category_id', 'name slug')
                 .populate('instructor_id', 'name avatar')
                 .skip((page - 1) * limit)
                 .limit(parseInt(limit))
-                .sort(sort);
+                .sort(sortConfig);
 
             const total = await Course.countDocuments(query);
 
