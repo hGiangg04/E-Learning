@@ -25,7 +25,8 @@ export default function LoginPage() {
       localStorage.setItem('token', payload.token);
       localStorage.setItem('user', JSON.stringify(payload.user));
       toast.success(res.data?.message || 'Đăng nhập thành công');
-      navigate(from, { replace: true });
+      const destination = payload.user?.role === 'admin' ? '/admin' : from;
+      navigate(destination, { replace: true });
       window.dispatchEvent(new Event('auth-changed'));
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Đăng nhập thất bại';
