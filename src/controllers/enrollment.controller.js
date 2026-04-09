@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Enrollment = require('../models/enrollment.model');
 const Course = require('../models/course.model');
 const Payment = require('../models/payment.model');
+const { createNotification } = require('./notification.controller');
 
 function generateOrderCode() {
     return `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -180,6 +181,14 @@ const enrollmentController = {
                 'course_id',
                 'title'
             );
+
+            await createNotification({
+                userId: enrollment.user_id,
+                type: 'enrollment_approved',
+                title: 'Đăng ký được duyệt!',
+                message: `Bạn đã được duyệt tham gia khóa học "${populated?.course_id?.title || 'này'}".`,
+                link: `/courses/${enrollment.course_id}`
+            });
 
             res.json({
                 success: true,

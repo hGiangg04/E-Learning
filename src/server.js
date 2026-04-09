@@ -58,6 +58,10 @@ const progressRoutes = require('./routes/progress.routes');
 const quizRoutes = require('./routes/quiz.routes');
 const statsRoutes = require('./routes/stats.routes');
 const videoUploadRoutes = require('./routes/videoUpload.routes');
+const reviewRoutes = require('./routes/review.routes');
+const commentRoutes = require('./routes/comment.routes');
+const certificateRoutes = require('./routes/certificate.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -71,6 +75,10 @@ app.use('/api/progress', progressRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/upload', videoUploadRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/certificates', certificateRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((req, res) => {
