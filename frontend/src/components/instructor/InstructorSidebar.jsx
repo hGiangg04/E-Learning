@@ -8,21 +8,15 @@ const DashboardIcon = () => (
   </svg>
 );
 
-const UsersIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-  </svg>
-);
-
 const CourseIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
   </svg>
 );
 
-const CategoryIcon = () => (
+const StudentsIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
   </svg>
 );
 
@@ -32,28 +26,9 @@ const EnrollmentIcon = () => (
   </svg>
 );
 
-const PaymentIcon = () => (
+const RevenueIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-  </svg>
-);
-
-const QuizIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const CouponIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-  </svg>
-);
-
-const LessonIcon = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
@@ -70,18 +45,14 @@ const HomeIcon = () => (
 );
 
 const menuItems = [
-  { label: 'Dashboard', path: '/admin', icon: <DashboardIcon /> },
-  { label: 'Người dùng', path: '/admin/users', icon: <UsersIcon /> },
-  { label: 'Khóa học', path: '/admin/courses', icon: <CourseIcon /> },
-  { label: 'Bài học', path: '/admin/lessons', icon: <LessonIcon /> },
-  { label: 'Danh mục', path: '/admin/categories', icon: <CategoryIcon /> },
-  { label: 'Đăng ký', path: '/admin/enrollments', icon: <EnrollmentIcon /> },
-  { label: 'Thanh toán', path: '/admin/payments', icon: <PaymentIcon /> },
-  { label: 'Quiz', path: '/admin/quizzes', icon: <QuizIcon /> },
-  { label: 'Coupon', path: '/admin/coupons', icon: <CouponIcon /> },
+  { label: 'Dashboard', path: '/instructor', icon: <DashboardIcon /> },
+  { label: 'Khóa học của tôi', path: '/instructor/courses', icon: <CourseIcon /> },
+  { label: 'Học viên', path: '/instructor/students', icon: <StudentsIcon /> },
+  { label: 'Đăng ký chờ duyệt', path: '/instructor/enrollments', icon: <EnrollmentIcon /> },
+  { label: 'Doanh thu', path: '/instructor/revenue', icon: <RevenueIcon /> },
 ];
 
-export default function AdminSidebar({ isCollapsed, onToggle }) {
+export default function InstructorSidebar({ isCollapsed, onToggle }) {
   const location = useLocation();
 
   const handleLogout = () => {
@@ -92,21 +63,21 @@ export default function AdminSidebar({ isCollapsed, onToggle }) {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 z-40 ${
+      className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-indigo-900 to-indigo-800 text-white transition-all duration-300 z-40 ${
         isCollapsed ? 'w-16' : 'w-64'
       }`}
     >
       <div className="flex flex-col h-full">
         {/* Logo */}
-        <div className="p-4 border-b border-slate-700">
+        <div className="p-4 border-b border-indigo-700">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary-600 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
               <CourseIcon />
             </div>
             {!isCollapsed && (
               <div className="overflow-hidden">
                 <h1 className="font-bold text-lg truncate">E-Learning</h1>
-                <p className="text-xs text-slate-400">Admin Panel</p>
+                <p className="text-xs text-indigo-300">Instructor Panel</p>
               </div>
             )}
           </div>
@@ -115,7 +86,7 @@ export default function AdminSidebar({ isCollapsed, onToggle }) {
         {/* Toggle Button */}
         <button
           onClick={onToggle}
-          className="absolute -right-3 top-20 w-6 h-6 bg-slate-700 rounded-full flex items-center justify-center hover:bg-slate-600 transition-colors"
+          className="absolute -right-3 top-20 w-6 h-6 bg-indigo-700 rounded-full flex items-center justify-center hover:bg-indigo-600 transition-colors"
         >
           <svg
             className={`w-4 h-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
@@ -133,7 +104,7 @@ export default function AdminSidebar({ isCollapsed, onToggle }) {
             <li>
               <Link
                 to="/"
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-600/80 mb-2"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group text-indigo-300 hover:bg-indigo-700 hover:text-white border border-indigo-600/80 mb-2"
                 title={isCollapsed ? 'Trang chủ' : undefined}
               >
                 <span className="flex-shrink-0">
@@ -144,16 +115,16 @@ export default function AdminSidebar({ isCollapsed, onToggle }) {
             </li>
             {menuItems.map((item) => {
               const isActive = location.pathname === item.path ||
-                (item.path !== '/admin' && location.pathname.startsWith(item.path));
-              
+                (item.path !== '/instructor' && location.pathname.startsWith(item.path));
+
               return (
                 <li key={item.path}>
                   <Link
                     to={item.path}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group ${
                       isActive
-                        ? 'bg-primary-600 text-white'
-                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                        ? 'bg-white text-indigo-800'
+                        : 'text-indigo-200 hover:bg-indigo-700 hover:text-white'
                     }`}
                     title={isCollapsed ? item.label : undefined}
                   >
@@ -169,10 +140,10 @@ export default function AdminSidebar({ isCollapsed, onToggle }) {
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-slate-700">
+        <div className="p-4 border-t border-indigo-700">
           <button
             onClick={handleLogout}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-red-600 hover:text-white transition-all w-full ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-indigo-300 hover:bg-red-600 hover:text-white transition-all w-full ${
               isCollapsed ? 'justify-center' : ''
             }`}
             title={isCollapsed ? 'Đăng xuất' : undefined}

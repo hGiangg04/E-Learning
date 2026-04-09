@@ -32,6 +32,14 @@ import CategoryManagement from './pages/admin/CategoryManagement';
 import EnrollmentManagement from './pages/admin/EnrollmentManagement';
 import PaymentManagement from './pages/admin/PaymentManagement';
 import QuizManagement from './pages/admin/QuizManagement';
+import CouponManagement from './pages/admin/CouponManagement';
+
+// Instructor Pages
+import InstructorDashboardPage from './pages/instructor/InstructorDashboardPage';
+import InstructorCoursesPage from './pages/instructor/InstructorCoursesPage';
+import InstructorStudentsPage from './pages/instructor/InstructorStudentsPage';
+import InstructorEnrollmentsPage from './pages/instructor/InstructorEnrollmentsPage';
+import InstructorRevenuePage from './pages/instructor/InstructorRevenuePage';
 
 // Kết nối Socket khi có token, ngắt khi đăng xuất, hiển thị toast cho notification real-time
 function SocketManager() {
@@ -115,9 +123,6 @@ function App() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/instructor/:id" element={<InstructorProfilePage />} />
 
-        {/* 404 */}
-        <Route path="*" element={<NotFoundPage />} />
-
         {/* Admin Routes */}
         <Route path="/admin" element={<DashboardPage />} />
         <Route path="/admin/users" element={<UserManagement />} />
@@ -127,6 +132,17 @@ function App() {
         <Route path="/admin/enrollments" element={<EnrollmentManagement />} />
         <Route path="/admin/payments" element={<PaymentManagement />} />
         <Route path="/admin/quizzes" element={<QuizManagement />} />
+        <Route path="/admin/coupons" element={<CouponManagement />} />
+
+        {/* Instructor Routes */}
+        <Route path="/instructor" element={<InstructorDashboardPage />} />
+        <Route path="/instructor/courses" element={<InstructorCoursesPage />} />
+        <Route path="/instructor/students" element={<InstructorStudentsPage />} />
+        <Route path="/instructor/enrollments" element={<InstructorEnrollmentsPage />} />
+        <Route path="/instructor/revenue" element={<InstructorRevenuePage />} />
+
+        {/* 404 — must be last */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );

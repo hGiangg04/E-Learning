@@ -79,4 +79,15 @@ const contentAdminOnly = (req, res, next) => {
     next();
 };
 
-module.exports = { authMiddleware, adminOnly, contentAdminOnly };
+// Chỉ giảng viên và admin mới truy cập được
+const instructorOrAdmin = (req, res, next) => {
+    if (req.user.role !== 'instructor' && req.user.role !== 'admin') {
+        return res.status(403).json({
+            success: false,
+            message: 'Chỉ giảng viên hoặc admin mới có quyền thực hiện thao tác này'
+        });
+    }
+    next();
+};
+
+module.exports = { authMiddleware, adminOnly, contentAdminOnly, instructorOrAdmin };

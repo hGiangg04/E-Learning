@@ -82,6 +82,8 @@ const certificateRoutes = require('./routes/certificate.routes');
 const cartRoutes = require('./routes/cart.routes');
 const quizQuestionRoutes = require('./routes/quizQuestion.routes');
 const instructorController = require('./controllers/instructor.controller');
+const instructorDashboardRoutes = require('./routes/instructorDashboard.routes');
+const couponRoutes = require('./routes/coupon.routes');
 
 // Giảng viên: dùng Router + đặt sớm (trùng với route trong course.routes.js)
 const instructorPublicRouter = express.Router();
@@ -107,6 +109,8 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/instructors', instructorDashboardRoutes);
+app.use('/api/coupons', couponRoutes);
 
 // Socket.io — khởi tạo sau khi đã require tất cả routes
 const { initSocket } = require('./config/socket');

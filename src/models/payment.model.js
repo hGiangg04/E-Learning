@@ -27,6 +27,32 @@ const paymentSchema = new mongoose.Schema({
         required: true,
         min: 0
     },
+    coupon_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Coupon',
+        default: null
+    },
+    coupon_code: {
+        type: String,
+        default: null,
+        trim: true
+    },
+    discount_percent: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100
+    },
+    discount_amount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    original_amount: {
+        type: Number,
+        default: null,
+        min: 0
+    },
     payment_method: {
         type: String,
         default: 'pending'

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import PageLayout from '../components/PageLayout';
 import ReviewsSection from '../components/ReviewsSection';
 import { courseService, enrollmentService, lessonService, wishlistService, cartService } from '../api';
+import { couponApi } from '../api/couponService';
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -18,6 +19,13 @@ export default function CourseDetailPage() {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [inCart, setInCart] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);
+
+  // Coupon state
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState('');
+
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const viewer =
     typeof window !== 'undefined' && localStorage.getItem('user')
@@ -136,7 +144,11 @@ export default function CourseDetailPage() {
     if (!courseId) return;
     setEnrolling(true);
     try {
-      const res = await enrollmentService.enroll(courseId);
+      const payload = { course_id: courseId };
+      if (appliedCoupon) {
+        payload.coupon_code = appliedCoupon.coupon_code;
+      }
+      const res = await enrollmentService.enroll(payload);
       toast.success(res.data?.message || 'Ghi danh thành công');
       try {
         const check = await enrollmentService.checkAccess(courseId);
@@ -216,6 +228,42 @@ export default function CourseDetailPage() {
     } finally {
       setCartLoading(false);
     }
+  };
+
+  const handleApplyCoupon = async () => {
+    if (!token) {
+      toast.error('Vui lòng đăng nhập để sử dụng mã giảm giá');
+      navigate('/login');
+      return;
+    }
+    if (!couponInput.trim()) {
+      setCouponError('Vui lòng nhập mã coupon');
+      return;
+    }
+    if (!courseId) return;
+
+    setCouponLoading(true);
+    setCouponError('');
+    try {
+      const response = await couponApi.applyCoupon(couponInput.trim(), courseId);
+      if (response.data.success) {
+        setAppliedCoupon(response.data.data);
+        toast.success(`Áp dụng mã ${response.data.data.coupon_code} thành công! Giảm ${response.data.data.discount_percent}%`);
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Mã coupon không hợp lệ';
+      setCouponError(msg);
+      setAppliedCoupon(null);
+      toast.error(msg);
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponInput('');
+    setAppliedCoupon(null);
+    setCouponError('');
   };
 
   const category = course?.category_id || course?.category;
@@ -300,9 +348,21 @@ export default function CourseDetailPage() {
               <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-4 border-t border-gray-100 pt-8">
                 <div>
                   <p className="text-sm text-gray-500">Học phí</p>
-                  <p className="text-2xl font-bold text-primary-600">{formatPrice(payPrice)}</p>
-                  {course.discount_price > 0 && course.price > course.discount_price && (
-                    <p className="text-sm text-gray-400 line-through">{formatPrice(course.price)}</p>
+                  {appliedCoupon ? (
+                    <div className="space-y-1">
+                      <p className="text-sm text-gray-400 line-through">{formatPrice(course.price)}</p>
+                      <p className="text-2xl font-bold text-green-600">{formatPrice(appliedCoupon.final_price)}</p>
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-800">
+                        -{appliedCoupon.discount_percent}% với mã {appliedCoupon.coupon_code}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-bold text-primary-600">{formatPrice(payPrice)}</p>
+                      {course.discount_price > 0 && course.price > course.discount_price && (
+                        <p className="text-sm text-gray-400 line-through">{formatPrice(course.price)}</p>
+                      )}
+                    </>
                   )}
                   {isAdmin && Number(payPrice) > 0 && (
                     <p className="text-xs text-primary-700 mt-2 max-w-md">
@@ -310,6 +370,51 @@ export default function CourseDetailPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Coupon input */}
+                {!canLearn && course.price > 0 && (
+                  <div className="sm:ml-auto w-full sm:w-auto">
+                    {appliedCoupon ? (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                        <span className="text-sm text-green-700 font-mono font-bold">{appliedCoupon.coupon_code}</span>
+                        <span className="text-xs text-green-600">-{appliedCoupon.discount_percent}%</span>
+                        <button
+                          type="button"
+                          onClick={handleRemoveCoupon}
+                          className="ml-auto text-green-600 hover:text-green-800 text-xs"
+                        >
+                          Bỏ
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => {
+                            setCouponInput(e.target.value.toUpperCase());
+                            setCouponError('');
+                          }}
+                          placeholder="Nhập mã coupon"
+                          className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono uppercase"
+                          disabled={couponLoading}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleApplyCoupon}
+                          disabled={couponLoading || !couponInput.trim()}
+                          className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60"
+                        >
+                          {couponLoading ? '...' : 'Áp dụng'}
+                        </button>
+                      </div>
+                    )}
+                    {couponError && (
+                      <p className="text-xs text-red-600 mt-1">{couponError}</p>
+                    )}
+                  </div>
+                )}
+              </div>
                 <div className="sm:ml-auto flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                   <button
                     type="button"
@@ -370,7 +475,6 @@ export default function CourseDetailPage() {
                 </div>
               </div>
             </div>
-          </div>
 
           {/* Danh sách bài học */}
           <section id="curriculum" className="mt-10 rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">

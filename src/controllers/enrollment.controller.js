@@ -99,9 +99,10 @@ const enrollmentController = {
     },
 
     // POST /api/enrollments — free: active; có phí: pending + tạo payment pending
+    // Hỗ trợ coupon: { course_id, coupon_code? }
     enrollCourse: async (req, res) => {
         try {
-            const { course_id } = req.body;
+            const { course_id, coupon_code } = req.body;
 
             if (!course_id || !mongoose.Types.ObjectId.isValid(course_id)) {
                 return res.status(400).json({
@@ -162,6 +163,54 @@ const enrollmentController = {
                 });
             }
 
+            // Xử lý coupon nếu có
+            let couponInfo = null;
+            let finalAmount = price;
+
+            if (coupon_code) {
+                const Coupon = require('../models/coupon.model');
+                const normalizedCode = coupon_code.trim().toUpperCase();
+                const coupon = await Coupon.findOne({ code: normalizedCode });
+
+                if (!coupon) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Mã coupon không tồn tại'
+                    });
+                }
+
+                if (coupon.course_id.toString() !== course_id) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Mã coupon không áp dụng cho khóa học này'
+                    });
+                }
+
+                const now = Date.now();
+                if (!coupon.is_active || coupon.start_date > now || coupon.end_date < now) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Mã coupon không hợp lệ hoặc đã hết hạn'
+                    });
+                }
+
+                if (coupon.used_count >= coupon.usage_limit) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Mã coupon đã hết lượt sử dụng'
+                    });
+                }
+
+                couponInfo = {
+                    coupon_id: coupon._id,
+                    coupon_code: coupon.code,
+                    discount_percent: coupon.discount_percent,
+                    discount_amount: coupon.calculateDiscount(price),
+                    original_amount: price
+                };
+                finalAmount = coupon.getFinalPrice(price);
+            }
+
             const enrollment = new Enrollment({
                 user_id: req.user._id,
                 course_id,
@@ -175,18 +224,33 @@ const enrollmentController = {
                 course_id,
                 enrollment_id: enrollment._id,
                 order_code,
-                amount: price,
+                amount: finalAmount,
+                original_amount: couponInfo ? price : null,
+                coupon_id: couponInfo ? couponInfo.coupon_id : null,
+                coupon_code: couponInfo ? couponInfo.coupon_code : null,
+                discount_percent: couponInfo ? couponInfo.discount_percent : 0,
+                discount_amount: couponInfo ? couponInfo.discount_amount : 0,
                 payment_method: req.body.payment_method || 'pending',
                 status: 'pending'
             });
             await payment.save();
+
+            // Tăng used_count của coupon nếu có
+            if (couponInfo) {
+                const Coupon = require('../models/coupon.model');
+                await Coupon.findByIdAndUpdate(couponInfo.coupon_id, { $inc: { used_count: 1 } });
+            }
+
+            const message = couponInfo
+                ? `Đăng ký đang chờ thanh toán. Mã giảm giá ${couponInfo.discount_percent}% đã được áp dụng.`
+                : 'Đăng ký đang chờ thanh toán. Sau khi thanh toán thành công, khóa học sẽ được kích hoạt tự động (hoặc admin duyệt).';
 
             // Thông báo cho học sinh cần thanh toán
             await emitNotification({
                 userId: req.user._id.toString(),
                 type: 'payment',
                 title: 'Chờ thanh toán',
-                message: `Bạn đã đăng ký khóa học "${course.title}" (${price.toLocaleString('vi-VN')}đ). Vui lòng hoàn tất thanh toán để được kích hoạt.`,
+                message: `Bạn đã đăng ký khóa học "${course.title}" (${finalAmount.toLocaleString('vi-VN')}đ). Vui lòng hoàn tất thanh toán để được kích hoạt.`,
                 link: '/cart'
             });
 
@@ -200,14 +264,17 @@ const enrollmentController = {
 
             return res.status(201).json({
                 success: true,
-                message:
-                    'Đăng ký đang chờ thanh toán. Sau khi thanh toán thành công, khóa học sẽ được kích hoạt tự động (hoặc admin duyệt).',
+                message,
                 data: {
                     enrollment,
                     needPayment: true,
                     payment: {
                         order_code,
-                        amount: price,
+                        amount: finalAmount,
+                        original_amount: couponInfo ? price : null,
+                        discount_amount: couponInfo ? couponInfo.discount_amount : 0,
+                        discount_percent: couponInfo ? couponInfo.discount_percent : 0,
+                        coupon_code: couponInfo ? couponInfo.coupon_code : null,
                         status: 'pending'
                     }
                 }
