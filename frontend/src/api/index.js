@@ -7,4 +7,5 @@ export { lessonService } from './lessonService';
 export { progressService } from './progressService';
 export { quizService } from './quizService';
 export { wishlistService } from './wishlistService';
+export { reviewService } from './reviewService';
 export { default as api } from './axios';

@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react';
 import PageLayout from '../components/PageLayout';
+import ReviewsSection from '../components/ReviewsSection';
 import { courseService, enrollmentService, lessonService, wishlistService } from '../api';
 
 export default function CourseDetailPage() {
@@ -333,6 +334,9 @@ export default function CourseDetailPage() {
               )}
             </ul>
           </section>
+
+          {/* Reviews Section */}
+          <ReviewsSection courseId={id} />
         </div>
       </article>
     </PageLayout>
