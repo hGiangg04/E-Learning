@@ -19,6 +19,18 @@ function categoryIdForForm(course) {
   return '';
 }
 
+/** URL trang tìm kiếm / redirect — không phải link ảnh trực tiếp */
+function looksLikeNonDirectImageUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const u = url.toLowerCase();
+  return (
+    u.includes('google.com/imgres') ||
+    u.includes('imgurl=') ||
+    u.includes('google.com/search') ||
+    u.includes('bing.com/images')
+  );
+}
+
 export default function CourseManagement() {
   const [courses, setCourses] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -27,12 +39,12 @@ export default function CourseManagement() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
+  const [thumbnailPreviewError, setThumbnailPreviewError] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     price: '',
     category_id: '',
-    level: 'beginner',
     thumbnail: '',
     is_published: 0,
   });
@@ -147,12 +159,12 @@ export default function CourseManagement() {
 
   const handleEdit = (course) => {
     setEditingCourse(course);
+    setThumbnailPreviewError(false);
     setFormData({
       title: course.title || '',
       description: course.description || '',
-      price: course.price ?? '',
+      price: course.price === 0 || course.price == null ? '' : course.price,
       category_id: categoryIdForForm(course),
-      level: course.level || 'beginner',
       thumbnail: course.thumbnail || '',
       is_published: course.is_published === 1 ? 1 : 0,
     });
@@ -175,6 +187,7 @@ export default function CourseManagement() {
     }
     const reader = new FileReader();
     reader.onload = () => {
+      setThumbnailPreviewError(false);
       setFormData((prev) => ({ ...prev, thumbnail: reader.result }));
     };
     reader.readAsDataURL(file);
@@ -221,11 +234,20 @@ export default function CourseManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const rawThumb = (formData.thumbnail || '').trim();
+      if (rawThumb && looksLikeNonDirectImageUrl(rawThumb)) {
+        toast.error('URL ảnh không hợp lệ: cần link trực tiếp tới file ảnh (.jpg, .png…), không dùng link trang Google Ảnh.');
+        return;
+      }
+      if (rawThumb && !rawThumb.startsWith('data:') && thumbnailPreviewError) {
+        toast.error('Ảnh thumbnail không tải được — sửa URL hoặc chọn file ảnh trên máy.');
+        return;
+      }
+
       const payload = {
         title: formData.title.trim(),
         description: formData.description,
-        price: Number(formData.price) || 0,
-        level: formData.level,
+        price: formData.price === '' || formData.price == null ? 0 : Number(formData.price) || 0,
         thumbnail: formData.thumbnail || '',
         is_published: Number(formData.is_published) === 1 ? 1 : 0,
         category_id: formData.category_id ? formData.category_id : null,
@@ -262,12 +284,12 @@ export default function CourseManagement() {
           <button
             onClick={() => {
               setEditingCourse(null);
+              setThumbnailPreviewError(false);
               setFormData({
                 title: '',
                 description: '',
                 price: '',
                 category_id: '',
-                level: 'beginner',
                 thumbnail: '',
                 is_published: 0,
               });
@@ -343,30 +365,17 @@ export default function CourseManagement() {
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Giá (VND)</label>
-                <input
-                  type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required
-                  min={0}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cấp độ</label>
-                <select
-                  value={formData.level}
-                  onChange={(e) => setFormData({ ...formData, level: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="beginner">Người mới</option>
-                  <option value="intermediate">Trung cấp</option>
-                  <option value="advanced">Nâng cao</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giá (VND)</label>
+              <input
+                type="number"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                min={0}
+                placeholder="Để trống = miễn phí"
+              />
+              <p className="text-xs text-gray-500 mt-1">Không nhập giá thì khóa học được coi là miễn phí (0đ).</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh thumbnail</label>
@@ -376,28 +385,54 @@ export default function CourseManagement() {
                 onChange={handleThumbnailFile}
                 className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
               />
-              <p className="text-xs text-gray-500 mt-1">PNG/JPG tối đa 2MB — hoặc dán URL bên dưới</p>
+              <p className="text-xs text-gray-500 mt-1">
+                PNG/JPG tối đa 2MB — hoặc dán URL trực tiếp tới file ảnh (không dùng link trang Google Ảnh / tìm kiếm).
+              </p>
               <input
-                type="text"
+                type="url"
                 value={formData.thumbnail?.startsWith('data:') ? '' : formData.thumbnail}
-                onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
+                onChange={(e) => {
+                  setThumbnailPreviewError(false);
+                  setFormData({ ...formData, thumbnail: e.target.value });
+                }}
                 className="w-full mt-2 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="https://..."
+                placeholder="https://example.com/poster.jpg"
               />
               {formData.thumbnail && (
-                <div className="mt-3 flex items-center gap-3">
-                  <img
-                    src={formData.thumbnail}
-                    alt="Preview"
-                    className="h-20 w-32 object-cover rounded-lg border border-gray-200 bg-gray-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, thumbnail: '' })}
-                    className="text-sm text-red-600 hover:underline"
-                  >
-                    Xóa ảnh
-                  </button>
+                <div className="mt-3 flex flex-col gap-2">
+                  <div className="flex items-start gap-3">
+                    {formData.thumbnail.startsWith('data:') ? (
+                      <img
+                        src={formData.thumbnail}
+                        alt="Preview"
+                        className="h-20 w-32 object-cover rounded-lg border border-gray-200 bg-gray-50"
+                      />
+                    ) : (
+                      <img
+                        src={formData.thumbnail}
+                        alt="Preview"
+                        className="h-20 w-32 object-cover rounded-lg border border-gray-200 bg-gray-50"
+                        onLoad={() => setThumbnailPreviewError(false)}
+                        onError={() => setThumbnailPreviewError(true)}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThumbnailPreviewError(false);
+                        setFormData({ ...formData, thumbnail: '' });
+                      }}
+                      className="text-sm text-red-600 hover:underline"
+                    >
+                      Xóa ảnh
+                    </button>
+                  </div>
+                  {thumbnailPreviewError && !formData.thumbnail.startsWith('data:') && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      Không tải được ảnh từ URL này. Hãy dùng link kết thúc bằng .jpg / .png / .webp trỏ thẳng tới file ảnh,
+                      không dùng link trang tìm kiếm hoặc Google Ảnh.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
