@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
 import { adminApi } from '../../api/adminApi';
+import { resolveDirectImageUrl } from '../../utils/resolveDirectImageUrl';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -17,18 +18,6 @@ function categoryIdForForm(course) {
   if (typeof c === 'object' && c._id != null) return String(c._id);
   if (typeof c === 'string') return c;
   return '';
-}
-
-/** URL trang tìm kiếm / redirect — không phải link ảnh trực tiếp */
-function looksLikeNonDirectImageUrl(url) {
-  if (!url || typeof url !== 'string') return false;
-  const u = url.toLowerCase();
-  return (
-    u.includes('google.com/imgres') ||
-    u.includes('imgurl=') ||
-    u.includes('google.com/search') ||
-    u.includes('bing.com/images')
-  );
 }
 
 export default function CourseManagement() {
@@ -48,6 +37,13 @@ export default function CourseManagement() {
     thumbnail: '',
     is_published: 0,
   });
+
+  /** URL dùng cho preview & lưu — tự trích imgurl từ link Google / tìm kiếm */
+  const resolvedThumbnail = useMemo(() => {
+    const t = formData.thumbnail?.trim() || '';
+    if (!t || t.startsWith('data:')) return t;
+    return resolveDirectImageUrl(t);
+  }, [formData.thumbnail]);
 
   const fetchCourses = async (page = 1, searchTerm = search) => {
     try {
@@ -235,20 +231,22 @@ export default function CourseManagement() {
     e.preventDefault();
     try {
       const rawThumb = (formData.thumbnail || '').trim();
-      if (rawThumb && looksLikeNonDirectImageUrl(rawThumb)) {
-        toast.error('URL ảnh không hợp lệ: cần link trực tiếp tới file ảnh (.jpg, .png…), không dùng link trang Google Ảnh.');
+      const thumbToSave = rawThumb.startsWith('data:') ? rawThumb : rawThumb ? resolvedThumbnail : '';
+
+      if (rawThumb && !rawThumb.startsWith('data:') && /google\.com\/imgres/i.test(rawThumb) && thumbToSave === rawThumb) {
+        toast.error('Không trích được link ảnh từ URL Google — hãy dùng link có tham số imgurl=... hoặc URL ảnh trực tiếp.');
         return;
       }
+
       if (rawThumb && !rawThumb.startsWith('data:') && thumbnailPreviewError) {
-        toast.error('Ảnh thumbnail không tải được — sửa URL hoặc chọn file ảnh trên máy.');
-        return;
+        toast('Ảnh có thể không hiển thị trong trình duyệt (hotlink) nhưng vẫn lưu URL đã trích.', { icon: 'ℹ️' });
       }
 
       const payload = {
         title: formData.title.trim(),
         description: formData.description,
         price: formData.price === '' || formData.price == null ? 0 : Number(formData.price) || 0,
-        thumbnail: formData.thumbnail || '',
+        thumbnail: thumbToSave || '',
         is_published: Number(formData.is_published) === 1 ? 1 : 0,
         category_id: formData.category_id ? formData.category_id : null,
       };
@@ -386,18 +384,31 @@ export default function CourseManagement() {
                 className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
               />
               <p className="text-xs text-gray-500 mt-1">
-                PNG/JPG tối đa 2MB — hoặc dán URL trực tiếp tới file ảnh (không dùng link trang Google Ảnh / tìm kiếm).
+                PNG/JPG tối đa 2MB — hoặc dán link trang Google Ảnh / URL tìm kiếm có tham số imgurl; hệ thống tự trích link ảnh để lưu và xem trước.
               </p>
               <input
-                type="url"
+                type="text"
                 value={formData.thumbnail?.startsWith('data:') ? '' : formData.thumbnail}
                 onChange={(e) => {
                   setThumbnailPreviewError(false);
                   setFormData({ ...formData, thumbnail: e.target.value });
                 }}
+                onBlur={() => {
+                  const raw = (formData.thumbnail || '').trim();
+                  if (!raw || raw.startsWith('data:')) return;
+                  const r = resolveDirectImageUrl(raw);
+                  if (r !== raw) {
+                    setThumbnailPreviewError(false);
+                    setFormData((prev) => ({ ...prev, thumbnail: r }));
+                    toast.success('Đã trích xuất link ảnh từ URL tìm kiếm.');
+                  }
+                }}
                 className="w-full mt-2 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="https://example.com/poster.jpg"
+                placeholder="Dán link Google Ảnh hoặc URL ảnh trực tiếp"
               />
+              {resolvedThumbnail && resolvedThumbnail !== formData.thumbnail && !formData.thumbnail?.startsWith('data:') && (
+                <p className="text-xs text-emerald-700 mt-1">Đang dùng ảnh từ URL đã trích (imgurl).</p>
+              )}
               {formData.thumbnail && (
                 <div className="mt-3 flex flex-col gap-2">
                   <div className="flex items-start gap-3">
@@ -409,7 +420,7 @@ export default function CourseManagement() {
                       />
                     ) : (
                       <img
-                        src={formData.thumbnail}
+                        src={resolvedThumbnail}
                         alt="Preview"
                         className="h-20 w-32 object-cover rounded-lg border border-gray-200 bg-gray-50"
                         onLoad={() => setThumbnailPreviewError(false)}
@@ -429,8 +440,7 @@ export default function CourseManagement() {
                   </div>
                   {thumbnailPreviewError && !formData.thumbnail.startsWith('data:') && (
                     <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Không tải được ảnh từ URL này. Hãy dùng link kết thúc bằng .jpg / .png / .webp trỏ thẳng tới file ảnh,
-                      không dùng link trang tìm kiếm hoặc Google Ảnh.
+                      Trình duyệt không tải được ảnh (máy chủ ảnh có thể chặn hotlink). Bạn vẫn có thể lưu — trang học viên có thể hiển thị khác tùy trình duyệt.
                     </p>
                   )}
                 </div>
