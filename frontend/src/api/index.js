@@ -6,6 +6,7 @@ export { statsService } from './statsService';
 export { lessonService } from './lessonService';
 export { progressService } from './progressService';
 export { quizService } from './quizService';
+export { quizQuestionService } from './quizQuestionService';
 export { wishlistService } from './wishlistService';
 export { reviewService } from './reviewService';
 export { notificationService } from './notificationService';

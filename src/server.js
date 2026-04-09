@@ -63,6 +63,7 @@ const reviewRoutes = require('./routes/review.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const certificateRoutes = require('./routes/certificate.routes');
 const cartRoutes = require('./routes/cart.routes');
+const quizQuestionRoutes = require('./routes/quizQuestion.routes');
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -74,6 +75,7 @@ app.use('/api/lessons', lessonRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/quizzes', quizRoutes);
+app.use('/api/quiz-questions', quizQuestionRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/upload', videoUploadRoutes);
 app.use('/api/wishlist', wishlistRoutes);

@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
 import { adminApi } from '../../api/adminApi';
+import { quizQuestionService } from '../../api/quizQuestionService';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -17,6 +18,22 @@ export default function QuizManagement() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuiz, setEditingQuiz] = useState(null);
   const [selectedQuiz, setSelectedQuiz] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionModalOpen, setQuestionModalOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [questionForm, setQuestionForm] = useState({
+    question_text: '',
+    question_type: 'single',
+    points: 1,
+    explanation: '',
+    options: [
+      { option_text: '', is_correct: true },
+      { option_text: '', is_correct: false },
+      { option_text: '', is_correct: false },
+      { option_text: '', is_correct: false }
+    ]
+  });
   const [formData, setFormData] = useState({
     course_id: '',
     title: '',
@@ -99,10 +116,147 @@ export default function QuizManagement() {
       const response = await adminApi.getQuiz(quiz._id);
       if (response.data.success) {
         setSelectedQuiz(response.data.data);
-        setIsModalOpen(true);
+        setQuestionModalOpen(true);
+        loadQuestions(quiz._id);
       }
     } catch (error) {
       toast.error('Không thể tải chi tiết quiz');
+    }
+  };
+
+  const loadQuestions = async (quizId) => {
+    setQuestionsLoading(true);
+    try {
+      const res = await quizQuestionService.getQuestionsByQuiz(quizId);
+      if (res.success) {
+        setQuestions(res.data?.questions || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
+
+  const handleAddQuestion = () => {
+    setEditingQuestion(null);
+    setQuestionForm({
+      question_text: '',
+      question_type: 'single',
+      points: 1,
+      explanation: '',
+      options: [
+        { option_text: '', is_correct: true },
+        { option_text: '', is_correct: false },
+        { option_text: '', is_correct: false },
+        { option_text: '', is_correct: false }
+      ]
+    });
+    // Mở rộng modal để hiển thị form câu hỏi
+  };
+
+  const handleEditQuestion = (q) => {
+    setEditingQuestion(q);
+    setQuestionForm({
+      question_text: q.question_text || '',
+      question_type: q.question_type || 'single',
+      points: q.points || 1,
+      explanation: q.explanation || '',
+      options: q.options?.length > 0 ? q.options.map(o => ({
+        option_text: o.option_text || '',
+        is_correct: o.is_correct || false
+      })) : [
+        { option_text: '', is_correct: true },
+        { option_text: '', is_correct: false }
+      ]
+    });
+  };
+
+  const handleDeleteQuestion = async (q) => {
+    if (!window.confirm('Bạn có chắc muốn xóa câu hỏi này?')) return;
+    try {
+      await quizQuestionService.deleteQuestion(q._id);
+      toast.success('Đã xóa câu hỏi');
+      if (selectedQuiz) loadQuestions(selectedQuiz._id || selectedQuiz.quiz?._id);
+    } catch (e) {
+      toast.error('Không thể xóa câu hỏi');
+    }
+  };
+
+  const handleQuestionOptionChange = (index, field, value) => {
+    const newOptions = [...questionForm.options];
+    if (field === 'is_correct') {
+      newOptions.forEach((opt, i) => { opt.is_correct = i === index; });
+    } else {
+      newOptions[index][field] = value;
+    }
+    setQuestionForm({ ...questionForm, options: newOptions });
+  };
+
+  const handleAddOption = () => {
+    setQuestionForm({
+      ...questionForm,
+      options: [...questionForm.options, { option_text: '', is_correct: false }]
+    });
+  };
+
+  const handleRemoveOption = (index) => {
+    if (questionForm.options.length <= 2) {
+      toast.error('Cần ít nhất 2 đáp án');
+      return;
+    }
+    const newOptions = questionForm.options.filter((_, i) => i !== index);
+    setQuestionForm({ ...questionForm, options: newOptions });
+  };
+
+  const handleSubmitQuestion = async (e) => {
+    e.preventDefault();
+    if (!questionForm.question_text.trim()) {
+      toast.error('Vui lòng nhập nội dung câu hỏi');
+      return;
+    }
+    const validOptions = questionForm.options.filter(o => o.option_text.trim());
+    if (validOptions.length < 2) {
+      toast.error('Cần ít nhất 2 đáp án hợp lệ');
+      return;
+    }
+    if (!questionForm.options.some(o => o.is_correct)) {
+      toast.error('Cần chọn ít nhất 1 đáp án đúng');
+      return;
+    }
+
+    const quizId = selectedQuiz?._id || selectedQuiz?.quiz?._id;
+    try {
+      if (editingQuestion) {
+        await quizQuestionService.updateQuestion(editingQuestion._id, {
+          ...questionForm,
+          options: questionForm.options.filter(o => o.option_text.trim())
+        });
+        toast.success('Đã cập nhật câu hỏi');
+      } else {
+        await quizQuestionService.addQuestion({
+          quiz_id: quizId,
+          ...questionForm,
+          options: questionForm.options.filter(o => o.option_text.trim())
+        });
+        toast.success('Đã thêm câu hỏi');
+      }
+      loadQuestions(quizId);
+      setQuestionForm({
+        question_text: '',
+        question_type: 'single',
+        points: 1,
+        explanation: '',
+        options: [
+          { option_text: '', is_correct: true },
+          { option_text: '', is_correct: false },
+          { option_text: '', is_correct: false },
+          { option_text: '', is_correct: false }
+        ]
+      });
+      setEditingQuestion(null);
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Có lỗi xảy ra');
     }
   };
 
@@ -229,30 +383,229 @@ export default function QuizManagement() {
                   <p className="font-medium">{selectedQuiz.questions?.length || 0}</p>
                 </div>
               </div>
+
+              {/* Question Management */}
               <div className="border-t pt-4">
-                <h4 className="font-medium mb-2">Danh sách câu hỏi ({selectedQuiz.questions?.length || 0})</h4>
-                {selectedQuiz.questions?.length > 0 ? (
-                  <div className="space-y-3 max-h-60 overflow-y-auto">
-                    {selectedQuiz.questions.map((q, idx) => (
-                      <div key={q._id || idx} className="p-3 bg-gray-50 rounded-lg">
-                        <p className="font-medium">{idx + 1}. {q.question_text}</p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Loại: {q.question_type} | Điểm: {q.points || 1}
-                        </p>
-                        {q.options?.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            {q.options.map((opt, i) => (
-                              <div key={i} className={`text-sm ${opt.is_correct ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
-                                {opt.is_correct ? '✓' : '○'} {opt.option_text}
-                              </div>
-                            ))}
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium">Danh sách câu hỏi ({questions.length})</h4>
+                  <button
+                    onClick={() => setEditingQuestion(null)}
+                    className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    + Thêm câu hỏi
+                  </button>
+                </div>
+
+                {editingQuestion !== undefined && !editingQuestion ? (
+                  <form onSubmit={handleSubmitQuestion} className="p-4 bg-gray-50 rounded-lg space-y-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Câu hỏi</label>
+                      <textarea
+                        value={questionForm.question_text}
+                        onChange={e => setQuestionForm({ ...questionForm, question_text: e.target.value })}
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                        placeholder="Nhập nội dung câu hỏi..."
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Điểm</label>
+                        <input
+                          type="number"
+                          value={questionForm.points}
+                          onChange={e => setQuestionForm({ ...questionForm, points: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          min={1}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Giải thích</label>
+                        <input
+                          type="text"
+                          value={questionForm.explanation}
+                          onChange={e => setQuestionForm({ ...questionForm, explanation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          placeholder="Giải thích đáp án đúng..."
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Đáp án</label>
+                      {questionForm.options.map((opt, idx) => (
+                        <div key={idx} className="flex items-center gap-2 mb-2">
+                          <input
+                            type="radio"
+                            name="correct"
+                            checked={opt.is_correct}
+                            onChange={() => handleQuestionOptionChange(idx, 'is_correct', true)}
+                            className="w-4 h-4 text-primary-600"
+                            title="Đáp án đúng"
+                          />
+                          <input
+                            type="text"
+                            value={opt.option_text}
+                            onChange={e => handleQuestionOptionChange(idx, 'option_text', e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder={`Đáp án ${idx + 1}`}
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveOption(idx)}
+                            className="p-2 text-gray-400 hover:text-red-500"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={handleAddOption}
+                        className="text-sm text-primary-600 hover:underline mt-1"
+                      >
+                        + Thêm đáp án
+                      </button>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingQuestion(undefined)}
+                        className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        Hủy
+                      </button>
+                      <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
+                        Thêm câu hỏi
+                      </button>
+                    </div>
+                  </form>
+                ) : editingQuestion ? (
+                  <form onSubmit={handleSubmitQuestion} className="p-4 bg-gray-50 rounded-lg space-y-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Câu hỏi</label>
+                      <textarea
+                        value={questionForm.question_text}
+                        onChange={e => setQuestionForm({ ...questionForm, question_text: e.target.value })}
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Điểm</label>
+                        <input
+                          type="number"
+                          value={questionForm.points}
+                          onChange={e => setQuestionForm({ ...questionForm, points: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          min={1}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Giải thích</label>
+                        <input
+                          type="text"
+                          value={questionForm.explanation}
+                          onChange={e => setQuestionForm({ ...questionForm, explanation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Đáp án</label>
+                      {questionForm.options.map((opt, idx) => (
+                        <div key={idx} className="flex items-center gap-2 mb-2">
+                          <input
+                            type="radio"
+                            name="correct_edit"
+                            checked={opt.is_correct}
+                            onChange={() => handleQuestionOptionChange(idx, 'is_correct', true)}
+                            className="w-4 h-4 text-primary-600"
+                          />
+                          <input
+                            type="text"
+                            value={opt.option_text}
+                            onChange={e => handleQuestionOptionChange(idx, 'option_text', e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveOption(idx)}
+                            className="p-2 text-gray-400 hover:text-red-500"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={handleAddOption}
+                        className="text-sm text-primary-600 hover:underline mt-1"
+                      >
+                        + Thêm đáp án
+                      </button>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingQuestion(undefined)}
+                        className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        Hủy
+                      </button>
+                      <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
+                        Lưu câu hỏi
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+
+                {questionsLoading ? (
+                  <p className="text-center text-gray-400 py-4">Đang tải...</p>
+                ) : questions.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">Chưa có câu hỏi nào</p>
+                ) : (
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {questions.map((q, idx) => (
+                      <div key={q._id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{idx + 1}. {q.question_text}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Điểm: {q.points || 1} | {q.options?.length || 0} đáp án
+                            </p>
+                            <div className="mt-2 space-y-1">
+                              {q.options?.map((opt, i) => (
+                                <div key={i} className={`text-sm ${opt.is_correct ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
+                                  {opt.is_correct ? '✓' : '○'} {opt.option_text}
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        )}
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => handleEditQuestion(q)}
+                              className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"
+                              title="Sửa"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuestion(q)}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                              title="Xóa"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-gray-500">Chưa có câu hỏi nào</p>
                 )}
               </div>
             </div>
