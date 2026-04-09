@@ -21,7 +21,7 @@ exports.createNotification = async ({ userId, type, title, message, link }) => {
 // Lấy danh sách thông báo của user
 exports.getMyNotifications = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { page = 1, limit = 20 } = req.query;
 
         const notifications = await Notification.find({ user_id: userId })
@@ -54,7 +54,7 @@ exports.getMyNotifications = async (req, res) => {
 // Đếm thông báo chưa đọc
 exports.getUnreadCount = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const count = await Notification.countDocuments({ user_id: userId, is_read: 0 });
         res.json({ success: true, data: { unread_count: count } });
     } catch (error) {
@@ -66,7 +66,7 @@ exports.getUnreadCount = async (req, res) => {
 // Đánh dấu đã đọc 1 thông báo
 exports.markAsRead = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { id } = req.params;
 
         await Notification.findOneAndUpdate(
@@ -84,7 +84,7 @@ exports.markAsRead = async (req, res) => {
 // Đánh dấu tất cả đã đọc
 exports.markAllAsRead = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
 
         await Notification.updateMany(
             { user_id: userId, is_read: 0 },
@@ -101,7 +101,7 @@ exports.markAllAsRead = async (req, res) => {
 // Xóa thông báo
 exports.deleteNotification = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { id } = req.params;
 
         await Notification.findOneAndDelete({ _id: id, user_id: userId });

@@ -102,7 +102,8 @@ export default function NotificationBell() {
             system: '🔔',
             achievement: '🏆',
             review: '⭐',
-            certificate: '📜'
+            certificate: '📜',
+            submission: '📝'
         };
         return icons[type] || '🔔';
     };
