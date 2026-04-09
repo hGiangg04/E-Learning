@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
 import { adminApi } from '../../api/adminApi';
+import { resolveCourseImageUrl } from '../../utils/courseImageUrl';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -218,6 +219,17 @@ export default function CourseManagement() {
     }
   };
 
+  const thumbnailForPayload = () => {
+    const t = formData.thumbnail || '';
+    if (!t) return '';
+    if (t.startsWith('data:')) return t;
+    return resolveCourseImageUrl(t.trim());
+  };
+
+  const rawThumbnail = formData.thumbnail || '';
+  const thumbnailPreviewSrc =
+    !rawThumbnail ? '' : rawThumbnail.startsWith('data:') ? rawThumbnail : resolveCourseImageUrl(rawThumbnail.trim());
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -226,7 +238,7 @@ export default function CourseManagement() {
         description: formData.description,
         price: Number(formData.price) || 0,
         level: formData.level,
-        thumbnail: formData.thumbnail || '',
+        thumbnail: thumbnailForPayload(),
         is_published: Number(formData.is_published) === 1 ? 1 : 0,
         category_id: formData.category_id ? formData.category_id : null,
       };
@@ -376,20 +388,28 @@ export default function CourseManagement() {
                 onChange={handleThumbnailFile}
                 className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
               />
-              <p className="text-xs text-gray-500 mt-1">PNG/JPG tối đa 2MB — hoặc dán URL bên dưới</p>
+              <p className="text-xs text-gray-500 mt-1">
+                PNG/JPG tối đa 2MB — hoặc dán URL ảnh trực tiếp. Link Google Images: dùng &quot;Sao chép địa chỉ hình ảnh&quot; hoặc hệ
+                thống sẽ thử lấy ảnh từ tham số imgurl nếu có.
+              </p>
               <input
                 type="text"
                 value={formData.thumbnail?.startsWith('data:') ? '' : formData.thumbnail}
                 onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
                 className="w-full mt-2 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="https://..."
+                placeholder="https://... (ảnh .jpg / .png hoặc trang Google Images)"
               />
-              {formData.thumbnail && (
+              {formData.thumbnail && thumbnailPreviewSrc && (
                 <div className="mt-3 flex items-center gap-3">
                   <img
-                    src={formData.thumbnail}
+                    src={thumbnailPreviewSrc}
                     alt="Preview"
                     className="h-20 w-32 object-cover rounded-lg border border-gray-200 bg-gray-50"
+                    onError={() =>
+                      toast.error(
+                        'Không tải được ảnh. Hãy dùng link ảnh trực tiếp (kết thúc .jpg/.png) hoặc chọn file từ máy.'
+                      )
+                    }
                   />
                   <button
                     type="button"
