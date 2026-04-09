@@ -4,6 +4,12 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi } from '../../api/adminApi';
 import { lessonService } from '../../api/lessonService';
 import api from '../../api/axios';
+import { parseYouTubeEmbedUrl } from '../../utils/youtubeEmbed';
+
+function isLikelyServerUpload(url) {
+  if (!url || typeof url !== 'string') return false;
+  return url.startsWith('/uploads/') || url.includes('/uploads/videos/');
+}
 
 /* ── Icons ── */
 const PlusIcon = () => (
@@ -98,7 +104,7 @@ function LessonModal({ courseId, lesson, onClose, onSaved }) {
       fd.append('video', file);
       const { data } = await api.post('/upload/video', fd);
       if (data.success) {
-        set('video_url', data.data.video_url);
+        set('video_url', data.data.video_url || '');
         toast.success('Upload video thành công');
       } else {
         toast.error(data.message || 'Upload thất bại');
@@ -190,13 +196,19 @@ function LessonModal({ courseId, lesson, onClose, onSaved }) {
             />
           </div>
 
-          {/* Video upload */}
+          {/* Video upload hoặc YouTube */}
           <div>
             <label className={labelDark}>Video bài giảng</label>
             {form.video_url && (
               <div className="mb-2 flex items-center gap-2 text-sm text-green-400">
                 <VideoIcon />
-                <span>Đã upload: {form.video_url.split('/').pop()}</span>
+                <span>
+                  {isLikelyServerUpload(form.video_url)
+                    ? `Đã upload: ${form.video_url.split('/').pop()}`
+                    : parseYouTubeEmbedUrl(form.video_url)
+                      ? 'Đã gắn YouTube'
+                      : 'Đã gắn URL video'}
+                </span>
               </div>
             )}
             <div className="flex gap-3">
@@ -223,6 +235,28 @@ function LessonModal({ courseId, lesson, onClose, onSaved }) {
               )}
             </div>
             <p className="text-xs text-zinc-500 mt-1">Hỗ trợ MP4, WebM, AVI. Tối đa 500MB.</p>
+
+            <div className="mt-4">
+              <label className={labelDark}>Hoặc nhúng YouTube</label>
+              <input
+                type="url"
+                className={inputDark}
+                value={isLikelyServerUpload(form.video_url) ? '' : form.video_url || ''}
+                onChange={(e) => set('video_url', e.target.value.trim())}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (!v) return;
+                  if (/youtube|youtu\.be/i.test(v) && !parseYouTubeEmbedUrl(v)) {
+                    toast.error('Link YouTube không hợp lệ. Dùng link dạng youtube.com/watch?v=... hoặc youtu.be/...');
+                  }
+                }}
+                placeholder="https://www.youtube.com/watch?v=..."
+                disabled={uploading}
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                Dán URL video YouTube. Upload file và link YouTube dùng chung một trường — chỉ lưu một nguồn (upload sẽ thay thế link).
+              </p>
+            </div>
           </div>
 
           {/* Thứ tự & flags */}

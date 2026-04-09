@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } fr
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { lessonService, courseService, progressService, quizService } from '../api';
+import { parseYouTubeEmbedUrl } from '../utils/youtubeEmbed';
 
 const BOOKMARK_KEY = 'elearning-lesson-bookmarks';
 
@@ -143,20 +144,29 @@ export default function LessonLearnPage() {
   const textStudyAccumRef = useRef(0);
   const videoCompleteSentRef = useRef(false);
 
-  const videoUrl = useMemo(() => {
-    if (!lesson?.video_url) return null;
-    const url = String(lesson.video_url);
-    if (url.startsWith('/uploads/videos/')) {
-      // Cùng origin + proxy Vite (`/uploads` → backend); prod: gốc API bỏ hậu tố /api
+  /** YouTube nhúng iframe; file: URL video (upload hoặc mp4/webm trực tiếp) */
+  const lessonVideo = useMemo(() => {
+    if (!lesson?.video_url) return { kind: 'none' };
+    const raw = String(lesson.video_url).trim();
+    if (!raw) return { kind: 'none' };
+
+    const yt = parseYouTubeEmbedUrl(raw);
+    if (yt) return { kind: 'youtube', embedSrc: yt };
+
+    if (raw.startsWith('/uploads/videos/')) {
       const base = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, '') || '';
       if (base && !import.meta.env.DEV) {
         const origin = base.replace(/\/api$/i, '');
-        return origin ? `${origin}${url}` : url;
+        const src = origin ? `${origin}${raw}` : raw;
+        return { kind: 'file', src };
       }
-      return url;
+      return { kind: 'file', src: raw };
     }
-    return url;
+
+    return { kind: 'file', src: raw };
   }, [lesson?.video_url]);
+
+  const fileVideoSrc = lessonVideo.kind === 'file' ? lessonVideo.src : null;
 
   const lessonIndex = useMemo(() => {
     if (!lesson?._id || !lessons.length) return -1;
@@ -283,7 +293,7 @@ export default function LessonLearnPage() {
   }, [lessonId]);
 
   useLayoutEffect(() => {
-    if (!lessonId || !videoUrl) return undefined;
+    if (!lessonId || !fileVideoSrc) return undefined;
     const el = videoRef.current;
     if (!el) return undefined;
 
@@ -345,10 +355,10 @@ export default function LessonLearnPage() {
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnded);
     };
-  }, [lessonId, videoUrl, patchLessonProgress]);
+  }, [lessonId, fileVideoSrc, patchLessonProgress]);
 
   useEffect(() => {
-    if (!lessonId || videoUrl) return undefined;
+    if (!lessonId || lessonVideo.kind === 'file' || lessonVideo.kind === 'youtube') return undefined;
     textStudyAccumRef.current = 0;
     const timer = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
@@ -357,7 +367,7 @@ export default function LessonLearnPage() {
       void patchLessonProgress({ time_spent: 30, progress_percentage: pct });
     }, 30000);
     return () => window.clearInterval(timer);
-  }, [lessonId, videoUrl, patchLessonProgress]);
+  }, [lessonId, lessonVideo.kind, patchLessonProgress]);
 
   const toggleBookmark = () => {
     if (!lessonId) return;
@@ -797,12 +807,12 @@ export default function LessonLearnPage() {
               )}
             </button>
 
-            {/* Video block */}
-            {videoUrl && (
+            {/* Video block — file upload / mp4 hoặc YouTube nhúng */}
+            {(lessonVideo.kind === 'youtube' || lessonVideo.kind === 'file') && (
               <section className="rounded-xl border border-zinc-800 bg-[#161616] overflow-hidden shadow-xl mb-10">
                 <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
                   <h2 className="text-sm font-medium text-zinc-200">
-                    Video bài học
+                    {lessonVideo.kind === 'youtube' ? 'Video YouTube' : 'Video bài học'}
                     {durationVi ? (
                       <span className="text-zinc-500 font-normal">
                         {' '}
@@ -816,24 +826,34 @@ export default function LessonLearnPage() {
                 </div>
                 <div className="p-3 sm:p-4">
                   <div className="aspect-video w-full rounded-lg overflow-hidden bg-black ring-1 ring-zinc-800">
-                    <video
-                      ref={videoRef}
-                      key={videoUrl}
-                      controls
-                      autoPlay={false}
-                      className="w-full h-full"
-                      preload="metadata"
-                    >
-                      <source src={videoUrl} />
-                      Trình duyệt của bạn không hỗ trợ phát video.
-                    </video>
+                    {lessonVideo.kind === 'youtube' ? (
+                      <iframe
+                        title="YouTube"
+                        src={`${lessonVideo.embedSrc}?rel=0`}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video
+                        ref={videoRef}
+                        key={fileVideoSrc}
+                        controls
+                        autoPlay={false}
+                        className="w-full h-full"
+                        preload="metadata"
+                      >
+                        <source src={fileVideoSrc} />
+                        Trình duyệt của bạn không hỗ trợ phát video.
+                      </video>
+                    )}
                   </div>
                 </div>
               </section>
             )}
 
             {/* Thời lượng — chỉ hiển thị nếu không có video */}
-            {!videoUrl && (
+            {lessonVideo.kind === 'none' && (
               <div className="mb-8">
                 <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-2">
                   Thời lượng
