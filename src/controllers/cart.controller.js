@@ -6,7 +6,7 @@ const Payment = require('../models/payment.model');
 // Lấy giỏ hàng của user
 exports.getMyCart = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
 
         const cart = await Cart.findOne({ user_id: userId })
             .populate({
@@ -46,7 +46,7 @@ exports.getMyCart = async (req, res) => {
 // Thêm khóa học vào giỏ hàng
 exports.addToCart = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { course_id } = req.body;
 
         if (!course_id) {
@@ -97,7 +97,7 @@ exports.addToCart = async (req, res) => {
 // Xóa khóa học khỏi giỏ hàng
 exports.removeFromCart = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { course_id } = req.params;
 
         const cart = await Cart.findOne({ user_id: userId });
@@ -123,7 +123,7 @@ exports.removeFromCart = async (req, res) => {
 // Xóa tất cả giỏ hàng
 exports.clearCart = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
 
         await Cart.findOneAndDelete({ user_id: userId });
 
@@ -137,7 +137,7 @@ exports.clearCart = async (req, res) => {
 // Checkout - tạo payment
 exports.checkout = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { payment_method = 'banking' } = req.body;
 
         const cart = await Cart.findOne({ user_id: userId })
@@ -150,6 +150,25 @@ exports.checkout = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Giỏ hàng trống' });
         }
 
+        const courseId = cart.items[0].course_id._id;
+
+        let enrollment = await Enrollment.findOne({ user_id: userId, course_id: courseId });
+        if (enrollment) {
+            if (enrollment.status === 'active') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Bạn đã đăng ký khóa học này'
+                });
+            }
+        } else {
+            enrollment = new Enrollment({
+                user_id: userId,
+                course_id: courseId,
+                status: 'pending'
+            });
+            await enrollment.save();
+        }
+
         // Tính tổng tiền
         const totalAmount = cart.items.reduce((sum, item) => {
             const course = item.course_id;
@@ -158,13 +177,14 @@ exports.checkout = async (req, res) => {
             return sum + (price > 0 ? price : 0);
         }, 0);
 
-        // Tạo payment record
+        // Tạo payment + gắn enrollment (admin duyệt → kích hoạt active)
         const payment = new Payment({
             user_id: userId,
-            course_id: cart.items[0].course_id._id,
+            course_id: courseId,
+            enrollment_id: enrollment._id,
             amount: totalAmount,
             payment_method,
-            payment_status: 'pending',
+            status: 'pending',
             order_code: `ORD${Date.now()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`
         });
         await payment.save();
@@ -181,7 +201,7 @@ exports.checkout = async (req, res) => {
                     order_code: payment.order_code,
                     amount: payment.amount,
                     payment_method: payment.payment_method,
-                    payment_status: payment.payment_status
+                    status: payment.status
                 }
             }
         });

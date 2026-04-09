@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import PageLayout from '../components/PageLayout';
 import { certificateService } from '../api/certificateService';
+import { enrollmentService, progressService } from '../api';
 
 const AwardIcon = () => (
     <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -23,6 +24,25 @@ export default function CertificatesPage() {
         }
         const load = async () => {
             try {
+                // Đồng bộ tiến độ từng khóa đang học → backend cấp chứng chỉ nếu đã 100%
+                try {
+                    const mine = await enrollmentService.getMine();
+                    const enrollments = mine.data?.data?.enrollments || [];
+                    for (const e of enrollments) {
+                        if (e.status !== 'active') continue;
+                        const cid = e.course_id?._id ?? e.course_id;
+                        if (cid) {
+                            try {
+                                await progressService.getCourseProgress(String(cid));
+                            } catch {
+                                /* bỏ qua từng khóa lỗi */
+                            }
+                        }
+                    }
+                } catch {
+                    /* không có danh sách ghi danh */
+                }
+
                 const res = await certificateService.getMyCertificates();
                 if (res.success) {
                     setCertificates(res.data?.certificates || []);

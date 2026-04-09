@@ -1,8 +1,8 @@
 const UserCertificate = require('../models/userCertificate.model');
 const Course = require('../models/course.model');
 const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
-const Enrollment = require('../models/enrollment.model');
 const CourseProgress = require('../models/courseProgress.model');
+const { syncCourseProgress } = require('../utils/syncCourseProgress');
 const { createNotification } = require('./notification.controller');
 
 /**
@@ -36,7 +36,7 @@ exports.tryIssueCertificateForCompletedCourse = async (userId, courseId) => {
 // Lấy tất cả chứng chỉ của user
 exports.getMyCertificates = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
 
         const certificates = await UserCertificate.find({ user_id: userId, status: 'active' })
             .populate({
@@ -61,7 +61,7 @@ exports.getMyCertificates = async (req, res) => {
 // Lấy chi tiết 1 chứng chỉ
 exports.getCertificateDetail = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { certNumber } = req.params;
 
         const cert = await UserCertificate.findOne({
@@ -153,7 +153,7 @@ exports.issueCertificate = async (userId, courseId) => {
 // Kiểm tra và cấp chứng chỉ nếu hoàn thành khóa học
 exports.checkAndIssueCertificate = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const { course_id } = req.body;
 
         if (!course_id) {
@@ -167,7 +167,8 @@ exports.checkAndIssueCertificate = async (req, res) => {
 
         const resolvedCourseId = course._id;
 
-        // Kiểm tra đã hoàn thành chưa
+        await syncCourseProgress(userId, resolvedCourseId);
+
         const progress = await CourseProgress.findOne({ user_id: userId, course_id: resolvedCourseId });
         if (!progress || Number(progress.progress_percentage) < 100) {
             return res.status(400).json({

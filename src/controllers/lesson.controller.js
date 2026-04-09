@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 const Lesson = require('../models/lesson.model');
 const Course = require('../models/course.model');
 const Enrollment = require('../models/enrollment.model');
+const Payment = require('../models/payment.model');
 const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
+const { activateEnrollmentFromPayment } = require('../utils/activateEnrollmentFromPayment');
 
 /**
  * Lấy collection native (bypass Mongoose schema) để đọc/ghi trực tiếp.
@@ -146,11 +148,27 @@ const lessonController = {
                 });
             }
 
-            const enrollment = await Enrollment.findOne({
+            let enrollment = await Enrollment.findOne({
                 user_id: req.user._id,
                 course_id: courseId,
                 status: 'active'
             });
+
+            if (!enrollment) {
+                const completedPay = await Payment.findOne({
+                    user_id: req.user._id,
+                    course_id: courseId,
+                    status: 'completed'
+                });
+                if (completedPay) {
+                    await activateEnrollmentFromPayment(completedPay);
+                    enrollment = await Enrollment.findOne({
+                        user_id: req.user._id,
+                        course_id: courseId,
+                        status: 'active'
+                    });
+                }
+            }
 
             if (!enrollment) {
                 return res.status(403).json({

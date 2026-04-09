@@ -55,6 +55,8 @@ export default function MyCoursesPage() {
                 const c = en.course_id;
                 const cid = typeof c === 'object' && c?._id ? c._id : en.course_id;
                 const title = typeof c === 'object' && c?.title ? c.title : 'Khóa học';
+                const active = en.status === 'active';
+                const pending = en.status === 'pending';
                 return (
                   <li
                     key={en._id}
@@ -66,12 +68,25 @@ export default function MyCoursesPage() {
                       </Link>
                       <p className="text-sm text-gray-500 mt-1">
                         Trạng thái:{' '}
-                        <span className="font-medium text-gray-700">{en.status || '—'}</span>
+                        <span className="font-medium text-gray-700">
+                          {pending
+                            ? 'Chờ xác nhận thanh toán (sau khi admin duyệt bạn sẽ vào học được)'
+                            : en.status || '—'}
+                        </span>
                       </p>
                     </div>
-                    <Link to={`/courses/${cid}`} className="btn-primary text-sm shrink-0">
-                      Vào học
-                    </Link>
+                    {active ? (
+                      <Link to={`/courses/${cid}`} className="btn-primary text-sm shrink-0 text-center">
+                        Vào học
+                      </Link>
+                    ) : (
+                      <Link
+                        to={`/courses/${cid}`}
+                        className="text-sm shrink-0 text-center px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                      >
+                        Xem khóa học
+                      </Link>
+                    )}
                   </li>
                 );
               })}

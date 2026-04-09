@@ -5,45 +5,7 @@ const CourseProgress = require('../models/courseProgress.model');
 const Enrollment = require('../models/enrollment.model');
 const certificateController = require('./certificate.controller');
 const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
-
-async function syncCourseProgress(userId, courseId) {
-    const totalLessons = await Lesson.countDocuments({ course_id: courseId, is_published: 1 });
-    const completedRows = await LessonProgress.countDocuments({
-        user_id: userId,
-        course_id: courseId,
-        is_completed: 1
-    });
-
-    const agg = await LessonProgress.aggregate([
-        {
-            $match: {
-                user_id: new mongoose.Types.ObjectId(userId),
-                course_id: new mongoose.Types.ObjectId(courseId)
-            }
-        },
-        { $group: { _id: null, totalTime: { $sum: '$time_spent' } } }
-    ]);
-    const totalTimeSpent = agg[0] ? agg[0].totalTime : 0;
-
-    const progress_percentage =
-        totalLessons > 0 ? Math.round((completedRows / totalLessons) * 100) : 0;
-
-    const completed_at =
-        totalLessons > 0 && completedRows >= totalLessons ? new Date() : null;
-
-    await CourseProgress.findOneAndUpdate(
-        { user_id: userId, course_id: courseId },
-        {
-            total_lessons: totalLessons,
-            lessons_completed: completedRows,
-            progress_percentage,
-            total_time_spent: totalTimeSpent,
-            last_accessed_at: new Date(),
-            completed_at
-        },
-        { upsert: true, new: true }
-    );
-}
+const { syncCourseProgress } = require('../utils/syncCourseProgress');
 
 const progressController = {
     // PATCH /api/progress/lessons/:lessonId — cập nhật tiến độ bài học
@@ -166,17 +128,17 @@ const progressController = {
             }
             const courseId = course._id;
 
+            await syncCourseProgress(req.user._id, courseId);
             let row = await CourseProgress.findOne({
                 user_id: req.user._id,
                 course_id: courseId
             });
 
-            if (!row) {
-                await syncCourseProgress(req.user._id, courseId);
-                row = await CourseProgress.findOne({
-                    user_id: req.user._id,
-                    course_id: courseId
-                });
+            if (row && Number(row.progress_percentage) >= 100) {
+                await certificateController.tryIssueCertificateForCompletedCourse(
+                    req.user._id,
+                    courseId
+                );
             }
 
             res.json({

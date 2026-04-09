@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const Enrollment = require('../models/enrollment.model');
 const Course = require('../models/course.model');
 const Payment = require('../models/payment.model');
+const { resolveCourseByParam } = require('../utils/resolveCourseByParam');
+const { activateEnrollmentFromPayment } = require('../utils/activateEnrollmentFromPayment');
 
 function generateOrderCode() {
     return `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -11,18 +13,37 @@ const enrollmentController = {
     // GET /api/enrollments/access/:courseId — đã ghi danh / có thể học chưa
     checkCourseAccess: async (req, res) => {
         try {
-            const { courseId } = req.params;
-            if (!mongoose.Types.ObjectId.isValid(courseId)) {
-                return res.status(400).json({
+            const { courseId: raw } = req.params;
+            const course = await resolveCourseByParam(raw);
+            if (!course) {
+                return res.status(404).json({
                     success: false,
-                    message: 'courseId không hợp lệ'
+                    message: 'Khóa học không tồn tại'
                 });
             }
+            const courseId = course._id;
 
-            const enrollment = await Enrollment.findOne({
+            let enrollment = await Enrollment.findOne({
                 user_id: req.user._id,
                 course_id: courseId
             });
+
+            if (req.user.role !== 'admin') {
+                if (!enrollment || enrollment.status !== 'active') {
+                    const completedPay = await Payment.findOne({
+                        user_id: req.user._id,
+                        course_id: courseId,
+                        status: 'completed'
+                    });
+                    if (completedPay) {
+                        await activateEnrollmentFromPayment(completedPay);
+                        enrollment = await Enrollment.findOne({
+                            user_id: req.user._id,
+                            course_id: courseId
+                        });
+                    }
+                }
+            }
 
             if (req.user.role === 'admin') {
                 return res.json({
@@ -54,6 +75,12 @@ const enrollmentController = {
 
     getMyEnrollments: async (req, res) => {
         try {
+            // Đồng bộ ghi danh từ mọi thanh toán đã completed (tránh lệch sau khi admin duyệt / lỗi tạm thời)
+            const paid = await Payment.find({ user_id: req.user._id, status: 'completed' });
+            for (const p of paid) {
+                await activateEnrollmentFromPayment(p);
+            }
+
             const enrollments = await Enrollment.find({ user_id: req.user._id })
                 .populate('course_id', 'title thumbnail price category_id')
                 .sort({ enrolled_at: -1 });

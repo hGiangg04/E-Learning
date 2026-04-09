@@ -12,4 +12,5 @@ export { reviewService } from './reviewService';
 export { notificationService } from './notificationService';
 export { certificateService } from './certificateService';
 export { cartService } from './cartService';
+export { instructorService } from './instructorService';
 export { default as api } from './axios';

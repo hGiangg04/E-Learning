@@ -31,19 +31,23 @@ const userCertificateSchema = new mongoose.Schema({
     }
 });
 
-// Index
+// Index (certificate_number: unique đã tạo index qua field `unique: true` — không gọi thêm schema.index)
 userCertificateSchema.index({ user_id: 1, course_id: 1 }, { unique: true });
-userCertificateSchema.index({ certificate_number: 1 }, { unique: true });
 userCertificateSchema.index({ user_id: 1 });
 
-// Tạo certificate_number tự động trước khi lưu
-userCertificateSchema.pre('save', async function (next) {
+function generateCertificateNumber() {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `CERT-${timestamp}-${random}`;
+}
+
+// Phải dùng pre('validate'): Mongoose validate trước pre('save'), nên pre('save')
+// không kịp gán certificate_number khi field đang required.
+userCertificateSchema.pre('validate', function (next) {
     if (!this.certificate_number) {
-        const timestamp = Date.now().toString(36).toUpperCase();
-        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-        this.certificate_number = `CERT-${timestamp}-${random}`;
+        this.certificate_number = generateCertificateNumber();
     }
-    next();
+    if (typeof next === 'function') next();
 });
 
 module.exports = mongoose.model('UserCertificate', userCertificateSchema);

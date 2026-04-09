@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
+import { fetchAdminPayments, updatePaymentAdmin, syncCompletedPaymentEnrollments } from '../../api/paymentService';
 
 export default function PaymentManagement() {
   const [payments, setPayments] = useState([]);
@@ -16,21 +18,27 @@ export default function PaymentManagement() {
   const fetchPayments = async () => {
     try {
       setLoading(true);
-      // Mock data
-      setPayments([
-        { _id: '1', user: { name: 'Nguyễn Văn A', email: 'vana@gmail.com' }, course: { title: 'React cơ bản' }, amount: 499000, method: 'banking', status: 'approved', createdAt: '2024-01-15' },
-        { _id: '2', user: { name: 'Trần Thị B', email: 'thib@gmail.com' }, course: { title: 'Node.js Advanced' }, amount: 799000, method: 'vnpay', status: 'pending', createdAt: '2024-01-14' },
-        { _id: '3', user: { name: 'Lê Văn C', email: 'vanc@gmail.com' }, course: { title: 'Python for Data Science' }, amount: 699000, method: 'momo', status: 'pending', createdAt: '2024-01-13' },
-        { _id: '4', user: { name: 'Phạm Thị D', email: 'thid@gmail.com' }, course: { title: 'Docker & Kubernetes' }, amount: 599000, method: 'banking', status: 'approved', createdAt: '2024-01-12' },
-        { _id: '5', user: { name: 'Hoàng Văn E', email: 'vane@gmail.com' }, course: { title: 'TypeScript Masterclass' }, amount: 549000, method: 'vnpay', status: 'rejected', createdAt: '2024-01-11' },
-        { _id: '6', user: { name: 'Đặng Thị F', email: 'thif@gmail.com' }, course: { title: 'MongoDB Fundamentals' }, amount: 449000, method: 'momo', status: 'approved', createdAt: '2024-01-10' },
-        { _id: '7', user: { name: 'Bùi Văn G', email: 'vang@gmail.com' }, course: { title: 'React cơ bản' }, amount: 499000, method: 'banking', status: 'pending', createdAt: '2024-01-09' },
-        { _id: '8', user: { name: 'Ngô Thị H', email: 'thih@gmail.com' }, course: { title: 'Python for Data Science' }, amount: 699000, method: 'vnpay', status: 'approved', createdAt: '2024-01-08' },
-      ]);
+      const list = await fetchAdminPayments();
+      setPayments(list);
     } catch (error) {
       console.error('Error fetching payments:', error);
+      toast.error(error.response?.data?.message || 'Không tải được danh sách thanh toán');
+      setPayments([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncEnrollments = async () => {
+    try {
+      const res = await syncCompletedPaymentEnrollments();
+      const d = res?.data;
+      toast.success(
+        `Đã xử lý ${d?.processed ?? 0} đơn. Còn ${d?.still_missing_enrollment_id ?? 0} bản ghi chưa gắn enrollment.`
+      );
+      await fetchPayments();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Đồng bộ thất bại');
     }
   };
 
@@ -63,8 +71,13 @@ export default function PaymentManagement() {
       key: 'method',
       label: 'Phương thức',
       render: (value) => {
-        const methods = { banking: 'Chuyển khoản', vnpay: 'VNPay', momo: 'MoMo' };
-        return <span className="text-gray-700">{methods[value]}</span>;
+        const methods = {
+          banking: 'Chuyển khoản',
+          vnpay: 'VNPay',
+          momo: 'MoMo',
+          pending: 'Chưa chọn / chờ',
+        };
+        return <span className="text-gray-700">{methods[value] || value}</span>;
       },
     },
     {
@@ -88,13 +101,28 @@ export default function PaymentManagement() {
     { key: 'createdAt', label: 'Ngày thanh toán' },
   ];
 
-  const handleApprove = (payment) => {
-    setPayments(payments.map((p) => (p._id === payment._id ? { ...p, status: 'approved' } : p)));
+  const handleApprove = async (payment) => {
+    try {
+      const updated = await updatePaymentAdmin(payment._id, 'approve');
+      if (updated) {
+        setPayments((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+        toast.success('Đã duyệt thanh toán');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Duyệt thất bại');
+    }
   };
 
-  const handleReject = (payment) => {
-    if (window.confirm('Bạn có chắc muốn từ chối thanh toán này?')) {
-      setPayments(payments.map((p) => (p._id === payment._id ? { ...p, status: 'rejected' } : p)));
+  const handleReject = async (payment) => {
+    if (!window.confirm('Bạn có chắc muốn từ chối thanh toán này?')) return;
+    try {
+      const updated = await updatePaymentAdmin(payment._id, 'reject');
+      if (updated) {
+        setPayments((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+        toast.success('Đã từ chối thanh toán');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Từ chối thất bại');
     }
   };
 
@@ -106,9 +134,18 @@ export default function PaymentManagement() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Quản lý thanh toán</h1>
-          <p className="text-gray-500">Duyệt và quản lý các giao dịch thanh toán</p>
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Quản lý thanh toán</h1>
+            <p className="text-gray-500">Duyệt và quản lý các giao dịch thanh toán</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleSyncEnrollments}
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 bg-primary-50 hover:bg-primary-100 transition-colors shrink-0"
+          >
+            Đồng bộ ghi danh (sửa đơn completed thiếu liên kết)
+          </button>
         </div>
 
         {/* Stats */}
@@ -192,7 +229,13 @@ export default function PaymentManagement() {
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Phương thức</label>
-                  <p className="font-medium">{selectedPayment.method === 'banking' ? 'Chuyển khoản' : selectedPayment.method.toUpperCase()}</p>
+                  <p className="font-medium">
+                    {selectedPayment.method === 'banking'
+                      ? 'Chuyển khoản'
+                      : selectedPayment.method === 'pending'
+                        ? 'Chưa chọn / chờ'
+                        : String(selectedPayment.method || '').toUpperCase()}
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

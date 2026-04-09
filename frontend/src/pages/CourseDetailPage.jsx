@@ -284,7 +284,13 @@ export default function CourseDetailPage() {
               <h1 className="text-3xl font-bold text-gray-900 mt-2">{course.title}</h1>
               {instructor?.name && (
                 <p className="mt-2 text-gray-600">
-                  Giảng viên: <span className="font-medium text-gray-900">{instructor.name}</span>
+                  Giảng viên:{' '}
+                  <Link
+                    to={`/instructor/${String(instructor._id ?? '')}`}
+                    className="font-medium text-gray-900 hover:text-primary-600 transition-colors"
+                  >
+                    {instructor.name}
+                  </Link>
                 </p>
               )}
               <p className="mt-6 text-gray-700 leading-relaxed whitespace-pre-line">

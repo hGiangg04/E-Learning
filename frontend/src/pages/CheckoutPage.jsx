@@ -43,10 +43,14 @@ export default function CheckoutPage() {
         try {
             const res = await cartService.checkout(selectedMethod);
             if (res.success) {
-                toast.success('Đã tạo đơn hàng! Vui lòng thanh toán theo hướng dẫn.');
+                const code = res.data?.payment?.order_code;
+                toast.success(
+                    code
+                        ? `Đã tạo đơn hàng ${code}. Sau khi chuyển khoản, admin sẽ duyệt — khóa học hiện ở mục "Khóa học của tôi".`
+                        : 'Đã tạo đơn hàng! Vui lòng thanh toán theo hướng dẫn.'
+                );
                 window.dispatchEvent(new Event('cart-changed'));
-                // Chuyển đến trang thông báo thanh toán hoặc lịch sử
-                setTimeout(() => navigate('/my-courses'), 2000);
+                navigate('/my-courses', { replace: true });
             }
         } catch (e) {
             toast.error(e.response?.data?.message || 'Có lỗi xảy ra');
@@ -99,10 +103,21 @@ export default function CheckoutPage() {
                                         <div className="flex items-center gap-3">
                                             <div className="w-16 h-12 rounded-lg overflow-hidden bg-gray-100">
                                                 {course.thumbnail ? (
-                                                    <img src={course.thumbnail} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center">📚</div>
-                                                )}
+                                                    <img
+                                                        src={course.thumbnail}
+                                                        alt=""
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                            e.target.nextSibling?.classList?.remove('hidden');
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                <div
+                                                    className={`w-full h-full flex items-center justify-center ${course.thumbnail ? 'hidden' : ''}`}
+                                                >
+                                                    📚
+                                                </div>
                                             </div>
                                             <div>
                                                 <p className="font-medium text-gray-900 line-clamp-1">{course.title}</p>

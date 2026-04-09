@@ -17,6 +17,7 @@ import CertificatesPage from './pages/CertificatesPage';
 import CertificateDetailPage from './pages/CertificateDetailPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
+import InstructorProfilePage from './pages/InstructorProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
 import './index.css';
 
@@ -53,6 +54,7 @@ function App() {
         <Route path="/certificates/:certNumber" element={<CertificateDetailPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/instructor/:id" element={<InstructorProfilePage />} />
 
         {/* 404 */}
         <Route path="*" element={<NotFoundPage />} />

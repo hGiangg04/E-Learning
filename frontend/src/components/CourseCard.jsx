@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { wishlistService } from '../api';
 
 const StarIcon = () => (
@@ -32,6 +32,7 @@ const ClockIcon = () => (
 );
 
 export default function CourseCard({ course, showWishlist = true }) {
+  const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -187,11 +188,20 @@ export default function CourseCard({ course, showWishlist = true }) {
           {title}
         </h3>
 
-        {/* Instructor */}
+        {/* Instructor — không dùng Link lồng trong Link (card bọc ngoài là Link) */}
         {instructor && (
-          <p className="text-sm text-gray-500 mb-3">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const iid = typeof instructor === 'object' ? instructor._id : instructor;
+              if (iid) navigate(`/instructor/${String(iid)}`);
+            }}
+            className="text-sm text-gray-500 mb-3 hover:text-primary-600 transition-colors text-left w-full"
+          >
             Giảng viên: <span className="text-gray-700">{instructor.name}</span>
-          </p>
+          </button>
         )}
 
         {/* Stats */}
