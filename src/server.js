@@ -60,6 +60,7 @@ const statsRoutes = require('./routes/stats.routes');
 const videoUploadRoutes = require('./routes/videoUpload.routes');
 const wishlistRoutes = require('./routes/wishlist.routes');
 const reviewRoutes = require('./routes/review.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -75,6 +76,7 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/upload', videoUploadRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -12,6 +12,7 @@ import CategoriesPage from './pages/CategoriesPage';
 import ProfilePage from './pages/ProfilePage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import WishlistPage from './pages/WishlistPage';
+import NotificationsPage from './pages/NotificationsPage';
 import './index.css';
 
 // Admin Pages
@@ -42,6 +43,7 @@ function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/my-courses" element={<MyCoursesPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin" element={<DashboardPage />} />

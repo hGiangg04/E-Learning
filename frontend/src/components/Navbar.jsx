@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import NotificationBell from './NotificationBell';
 
 const BookIcon = () => (
   <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -105,9 +106,11 @@ export default function Navbar() {
           </div>
 
           {/* Auth Buttons */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3">
             {user ? (
-              <div className="relative">
+              <div className="flex items-center gap-2">
+                <NotificationBell />
+                <div className="relative">
                 <button
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                   className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary-50 hover:bg-primary-100 transition-colors"
@@ -207,6 +210,9 @@ export default function Navbar() {
                   </Link>
                   <Link to="/wishlist" className="text-sm text-gray-600">
                     Yêu thích
+                  </Link>
+                  <Link to="/notifications" className="text-sm text-gray-600">
+                    Thông báo
                   </Link>
                   <Link to="/my-courses" className="text-sm text-gray-600">
                     Khóa học của tôi

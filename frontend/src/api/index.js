@@ -8,4 +8,5 @@ export { progressService } from './progressService';
 export { quizService } from './quizService';
 export { wishlistService } from './wishlistService';
 export { reviewService } from './reviewService';
+export { notificationService } from './notificationService';
 export { default as api } from './axios';
