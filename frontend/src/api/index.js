@@ -6,4 +6,5 @@ export { statsService } from './statsService';
 export { lessonService } from './lessonService';
 export { progressService } from './progressService';
 export { quizService } from './quizService';
+export { reviewService } from './reviewService';
 export { default as api } from './axios';

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import PageLayout from '../components/PageLayout';
-import { courseService, enrollmentService, lessonService } from '../api';
+import { courseService, enrollmentService, lessonService, reviewService } from '../api';
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -14,6 +14,14 @@ export default function CourseDetailPage() {
   const [enrolling, setEnrolling] = useState(false);
   const [access, setAccess] = useState(null);
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const [reviews, setReviews] = useState([]);
+  const [reviewStats, setReviewStats] = useState({ average_rating: 0, review_count: 0 });
+  const [myReview, setMyReview] = useState(null);
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -65,16 +73,109 @@ export default function CourseDetailPage() {
     enrollmentService
       .checkAccess(id)
       .then((res) => {
-        if (cancelled || !res.data?.success) return;
-        setAccess(res.data.data);
+        if (cancelled) return;
+        const d = res?.data?.data;
+        if (d !== undefined) setAccess(d);
       })
-      .catch(() => {
-        if (!cancelled) setAccess(null);
+      .catch((err) => {
+        if (err?.response?.status !== 401 && !cancelled) {
+          setAccess(null);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [id, token]);
+
+  /* ── Load đánh giá ── */
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setReviewLoading(true);
+
+    const loadReviews = async () => {
+      try {
+        const res = await reviewService.getReviewsByCourse(id);
+        if (cancelled) return;
+        if (res?.success) {
+          setReviews(res.data?.reviews ?? []);
+          setReviewStats(res.data?.stats ?? { average_rating: 0, review_count: 0 });
+        }
+      } catch {
+        if (!cancelled) setReviews([]);
+      } finally {
+        if (!cancelled) setReviewLoading(false);
+      }
+    };
+
+    const loadMyReview = async () => {
+      if (!token) return;
+      try {
+        const res = await reviewService.getMyReview(id);
+        if (cancelled || !res?.success) return;
+        const mine = (res.data?.reviews ?? []).find((r) => String(r.course_id?._id ?? r.course_id) === String(id));
+        if (mine) {
+          setMyReview(mine);
+          setReviewRating(mine.rating);
+          setReviewComment(mine.comment || '');
+        }
+      } catch { /* ignore */ }
+    };
+
+    Promise.all([loadReviews(), loadMyReview()]);
+    return () => { cancelled = true; };
+  }, [id, token]);
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!token) {
+      toast.error('Vui lòng đăng nhập để đánh giá');
+      navigate('/login');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const res = await reviewService.submitReview({ course_id: id, rating: reviewRating, comment: reviewComment });
+      if (res.success) {
+        setMyReview(res.data?.review ?? null);
+        setEditMode(false);
+        toast.success(myReview ? 'Đã cập nhật đánh giá' : 'Cảm ơn bạn đã đánh giá!');
+        // Reload stats
+        const statsRes = await reviewService.getReviewsByCourse(id);
+        if (statsRes?.success) {
+          setReviewStats(statsRes.data?.stats ?? reviewStats);
+          setReviews(statsRes.data?.reviews ?? reviews);
+        }
+      } else {
+        toast.error(res.message || 'Gửi đánh giá thất bại');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Gửi đánh giá thất bại');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId) => {
+    if (!window.confirm('Xóa đánh giá của bạn?')) return;
+    try {
+      const res = await reviewService.deleteReview(reviewId);
+      if (res.success) {
+        setMyReview(null);
+        setReviewRating(5);
+        setReviewComment('');
+        setEditMode(false);
+        toast.success('Đã xóa đánh giá');
+        const statsRes = await reviewService.getReviewsByCourse(id);
+        if (statsRes?.success) {
+          setReviewStats(statsRes.data?.stats ?? reviewStats);
+          setReviews(statsRes.data?.reviews ?? reviews);
+        }
+      }
+    } catch {
+      toast.error('Xóa đánh giá thất bại');
+    }
+  };
 
   const formatPrice = (price) => {
     if (price === 0 || price == null) return 'Miễn phí';
@@ -126,6 +227,7 @@ export default function CourseDetailPage() {
   const canLearn = access?.canLearn === true;
   const enrolled = access?.enrolled === true;
   const pendingApproval = enrolled && access?.status === 'pending';
+  const hasReviewed = !!myReview;
 
   const firstLessonId = lessons[0]?._id;
 
@@ -275,6 +377,155 @@ export default function CourseDetailPage() {
                     </li>
                   );
                 })
+              )}
+            </ul>
+          </section>
+
+          {/* ── Đánh giá ── */}
+          <section className="mt-10 rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900">Đánh giá khóa học</h2>
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map(n => (
+                    <svg key={n} className={`w-5 h-5 ${n <= Math.round(reviewStats.average_rating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                  ))}
+                </div>
+                <span className="font-semibold text-gray-900">{Number(reviewStats.average_rating).toFixed(1)}</span>
+                <span className="text-gray-500 text-sm">({reviewStats.review_count} đánh giá)</span>
+              </div>
+            </div>
+
+            {/* Form đánh giá — chỉ hiện khi đã ghi danh */}
+            {enrolled ? (
+              <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50">
+                {editMode || !hasReviewed ? (
+                  <form onSubmit={handleSubmitReview} className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600">Chọn sao:</span>
+                      <div className="flex items-center gap-1">
+                        {[1,2,3,4,5].map(n => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setReviewRating(n)}
+                            className="focus:outline-none"
+                          >
+                            <svg className={`w-6 h-6 transition-colors ${n <= reviewRating ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-200'}`} fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                            </svg>
+                          </button>
+                        ))}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">{reviewRating}/5</span>
+                    </div>
+                    <textarea
+                      value={reviewComment}
+                      onChange={e => setReviewComment(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                      placeholder="Chia sẻ trải nghiệm của bạn về khóa học... (tùy chọn)"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={submittingReview}
+                        className="px-5 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-60 transition-colors"
+                      >
+                        {submittingReview ? 'Đang gửi…' : hasReviewed ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
+                      </button>
+                      {hasReviewed && (
+                        <button
+                          type="button"
+                          onClick={() => { setEditMode(false); setReviewRating(myReview.rating); setReviewComment(myReview.comment || ''); }}
+                          className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          Hủy
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold text-sm">
+                        {myReview?.user_id?.name?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1 mb-1">
+                        {[1,2,3,4,5].map(n => (
+                          <svg key={n} className={`w-4 h-4 ${n <= myReview.rating ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                        ))}
+                      </div>
+                      <p className="text-sm text-gray-700">{myReview.comment || 'Đã đánh giá.'}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(myReview.created_at).toLocaleDateString('vi-VN')}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 flex gap-2">
+                      <button
+                        onClick={() => setEditMode(true)}
+                        className="text-xs text-primary-600 hover:underline"
+                      >
+                        Sửa
+                      </button>
+                      <button
+                        onClick={() => handleDeleteReview(myReview._id)}
+                        className="text-xs text-red-500 hover:underline"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="px-6 py-4 border-b border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Đăng ký khóa học để đánh giá.
+                </p>
+              </div>
+            )}
+
+            {/* Danh sách đánh giá */}
+            <ul className="divide-y divide-gray-100">
+              {reviewLoading ? (
+                <li className="px-6 py-6 text-center text-gray-400">Đang tải đánh giá…</li>
+              ) : reviews.length === 0 ? (
+                <li className="px-6 py-6 text-center text-gray-500">Chưa có đánh giá nào. Hãy là người đầu tiên!</li>
+              ) : (
+                reviews.map(review => (
+                  <li key={review._id} className="px-6 py-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                        {review.user_id?.name?.[0]?.toUpperCase() || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-gray-900 text-sm">{review.user_id?.name || 'Học viên ẩn danh'}</span>
+                          <div className="flex items-center gap-0.5">
+                            {[1,2,3,4,5].map(n => (
+                              <svg key={n} className={`w-3.5 h-3.5 ${n <= review.rating ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                              </svg>
+                            ))}
+                          </div>
+                        </div>
+                        {review.comment && (
+                          <p className="text-sm text-gray-700 whitespace-pre-line">{review.comment}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(review.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                ))
               )}
             </ul>
           </section>
