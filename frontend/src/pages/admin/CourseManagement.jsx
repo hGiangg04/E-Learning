@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import DataTable from '../../components/admin/DataTable';
 import Modal from '../../components/admin/Modal';
 import { adminApi } from '../../api/adminApi';
+import { resolveDirectImageUrl } from '../../utils/resolveDirectImageUrl';
 
 const PlusIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -19,14 +20,15 @@ function categoryIdForForm(course) {
   return '';
 }
 
-/** URL trang tìm kiếm / redirect — không phải link ảnh trực tiếp */
+/** Vẫn là trang tìm kiếm / không có URL ảnh rút gọn được */
 function looksLikeNonDirectImageUrl(url) {
   if (!url || typeof url !== 'string') return false;
+  const resolved = resolveDirectImageUrl(url);
+  if (resolved !== url) return false;
   const u = url.toLowerCase();
   return (
     u.includes('google.com/imgres') ||
-    u.includes('imgurl=') ||
-    u.includes('google.com/search') ||
+    (u.includes('google.com/search') && u.includes('tbm=isch')) ||
     u.includes('bing.com/images')
   );
 }
@@ -234,9 +236,12 @@ export default function CourseManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const rawThumb = (formData.thumbnail || '').trim();
-      if (rawThumb && looksLikeNonDirectImageUrl(rawThumb)) {
-        toast.error('URL ảnh không hợp lệ: cần link trực tiếp tới file ảnh (.jpg, .png…), không dùng link trang Google Ảnh.');
+      let rawThumb = (formData.thumbnail || '').trim();
+      if (rawThumb && !rawThumb.startsWith('data:')) {
+        rawThumb = resolveDirectImageUrl(rawThumb);
+      }
+      if (rawThumb && looksLikeNonDirectImageUrl(formData.thumbnail?.trim() || '')) {
+        toast.error('URL ảnh không hợp lệ: dán link Google có tham số imgurl, hoặc link trực tiếp tới file .jpg/.png.');
         return;
       }
       if (rawThumb && !rawThumb.startsWith('data:') && thumbnailPreviewError) {
@@ -248,7 +253,7 @@ export default function CourseManagement() {
         title: formData.title.trim(),
         description: formData.description,
         price: formData.price === '' || formData.price == null ? 0 : Number(formData.price) || 0,
-        thumbnail: formData.thumbnail || '',
+        thumbnail: rawThumb || '',
         is_published: Number(formData.is_published) === 1 ? 1 : 0,
         category_id: formData.category_id ? formData.category_id : null,
       };
@@ -386,17 +391,27 @@ export default function CourseManagement() {
                 className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
               />
               <p className="text-xs text-gray-500 mt-1">
-                PNG/JPG tối đa 2MB — hoặc dán URL trực tiếp tới file ảnh (không dùng link trang Google Ảnh / tìm kiếm).
+                PNG/JPG tối đa 2MB — hoặc dán URL ảnh. Link trang Google Ảnh (có tham số imgurl) sẽ được tự trích link ảnh khi bạn rời ô nhập (blur).
               </p>
               <input
-                type="url"
+                type="text"
                 value={formData.thumbnail?.startsWith('data:') ? '' : formData.thumbnail}
                 onChange={(e) => {
                   setThumbnailPreviewError(false);
                   setFormData({ ...formData, thumbnail: e.target.value });
                 }}
+                onBlur={() => {
+                  const raw = (formData.thumbnail || '').trim();
+                  if (!raw || raw.startsWith('data:')) return;
+                  const resolved = resolveDirectImageUrl(raw);
+                  if (resolved !== raw) {
+                    setThumbnailPreviewError(false);
+                    setFormData((prev) => ({ ...prev, thumbnail: resolved }));
+                    toast.success('Đã trích xuất link ảnh từ URL.');
+                  }
+                }}
                 className="w-full mt-2 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="https://example.com/poster.jpg"
+                placeholder="https://... hoặc dán link từ Google Ảnh"
               />
               {formData.thumbnail && (
                 <div className="mt-3 flex flex-col gap-2">
@@ -429,8 +444,8 @@ export default function CourseManagement() {
                   </div>
                   {thumbnailPreviewError && !formData.thumbnail.startsWith('data:') && (
                     <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Không tải được ảnh từ URL này. Hãy dùng link kết thúc bằng .jpg / .png / .webp trỏ thẳng tới file ảnh,
-                      không dùng link trang tìm kiếm hoặc Google Ảnh.
+                      Không tải được ảnh từ URL này. Thử dán link Google có chứa imgurl (click ảnh → Sao chép link hình),
+                      hoặc URL trực tiếp tới file .jpg / .png / .webp.
                     </p>
                   )}
                 </div>
